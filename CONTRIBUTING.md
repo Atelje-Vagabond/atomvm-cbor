@@ -6,7 +6,7 @@ This project aims to keep the public repository small, readable, and reproducibl
 
 ## Before opening a pull request
 
-Please make sure your change is focused and easy to review.
+Please keep changes focused and easy to review.
 
 Good pull requests usually include:
 
@@ -39,19 +39,48 @@ For normal development and smoke testing, you need:
 
 For AtomVM validation, you need network access so the workflow or local command can download the official AtomVM release binary and library used by the test.
 
-For ESP-IDF validation, Docker-compatible container support is required because the validation script may run ESP-IDF builds inside containers.
+For ESP-IDF validation, container support is required because the validation helper may run ESP-IDF builds in a containerized environment.
 
 Common working setups include:
 
 - Docker Desktop on macOS, Linux, or Windows
 - OrbStack on macOS
-- Colima with Docker-compatible CLI on macOS
-- Podman with Docker-compatible command support on Linux
-- a native Linux Docker Engine installation
+- Colima with Docker CLI support on macOS
+- Podman with Docker-style CLI support on Linux
+- native Linux Docker Engine
 
-The exact command used by the release helper is documented in `scripts/release-check.sh` and `scripts/test-esp-idf.sh`.
+The exact commands are documented in `scripts/release-check.sh` and `scripts/test-esp-idf.sh`.
 
-If your system does not have a Docker-compatible runtime, run the normal OTP and AtomVM checks first and mention that ESP-IDF validation was not run locally.
+If your system does not have a suitable container runtime, run the normal OTP and AtomVM checks first and mention that ESP-IDF validation was not run locally.
+
+## Optional local pre-push hook
+
+You can install the optional local hook with:
+
+```bash
+sh scripts/install-git-hooks.sh
+```
+
+For normal feature branches, the hook runs the standard release check before push:
+
+```bash
+scripts/release-check.sh v0.1.1
+```
+
+ESP-IDF validation is intentionally not run on every normal branch push. It is reserved for release-focused pushes:
+
+- current branch is `release/*`
+- pushed ref is a `v*` tag
+- remote ref is a `release/*` branch
+- `AVM_CBOR_WITH_ESP_IDF=1` is set
+
+In those cases, the hook runs:
+
+```bash
+scripts/release-check.sh v0.1.1 --with-esp-idf
+```
+
+Local hooks are a developer convenience. GitHub CI remains the source of truth for pull request and merge readiness.
 
 ## Local checks
 
@@ -75,7 +104,7 @@ Run release checks:
 scripts/release-check.sh v0.1.1
 ```
 
-Run release checks with ESP-IDF validation when a Docker-compatible runtime is available:
+Run release checks with ESP-IDF validation when a suitable container runtime is available:
 
 ```bash
 scripts/release-check.sh v0.1.1 --with-esp-idf
@@ -100,16 +129,9 @@ When updating benchmark reports, include:
 
 This repository must stay public-safe.
 
-Do not add:
+Do not add project-private operational notes, machine-specific files, assistant-specific instruction files, or local environment material.
 
-- assistant-specific instruction files
-- internal workflow notes
-- private runtime state
-- private infrastructure details
-- local machine-specific files
-- sensitive credentials
-
-The CI rejects known internal or assistant-specific file names and markers.
+The CI rejects known non-public file names and markers.
 
 ## Pull request style
 
