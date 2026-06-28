@@ -1,0 +1,38 @@
+name: ESP-IDF Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version to validate
+        required: true
+        default: v0.1.1
+
+permissions:
+  contents: read
+
+jobs:
+  esp-idf:
+    name: Manual ESP-IDF build validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Erlang/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: 27
+
+      - name: Verify Docker is available
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker --version
+
+      - name: Run release check with ESP-IDF validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh scripts/release-check.sh "${{ inputs.version }}" --with-esp-idf
