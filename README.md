@@ -171,14 +171,15 @@ atomvm /tmp/avm_cbor.beam /tmp/avm_cbor_atomvm.beam /path/to/atomvmlib.avm
 Pull requests run public-safe checks:
 
 1. **Signed-off-by check** — verifies commits contain a DCO-style sign-off trailer.
-2. **Public repository hygiene** — rejects internal or assistant-specific files.
+2. **Public repository hygiene** — rejects non-public project files and markers.
 3. **Basic repository checks** — validates required files and runs OTP smoke tests.
 4. **AtomVM validation** — runs the AtomVM test using the official AtomVM 0.6.6 binary.
+5. **Security scan** — runs a Gitleaks scan on PRs. Workflow lint/security checks run only when `.github/workflows/**` changes, and shell lint runs only when `scripts/**` changes.
 
 ESP-IDF build validation is available as a manually triggered workflow:
 
 ```bash
-scripts/release-check.sh v0.1.1 --with-esp-idf
+scripts/release-check.sh "v$(cat VERSION)" --with-esp-idf
 ```
 
 Manual ESP-IDF validation requires a Docker-compatible container runtime and must pass before release tagging.
