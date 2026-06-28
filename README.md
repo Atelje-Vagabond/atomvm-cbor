@@ -170,7 +170,7 @@ atomvm /tmp/avm_cbor.beam /tmp/avm_cbor_atomvm.beam /path/to/atomvmlib.avm
 
 Pull requests run public-safe checks:
 
-1. **Signed-off-by check** — verifies commits contain the required sign-off trailer.
+1. **Signed-off-by check** — verifies commits contain a DCO-style sign-off trailer.
 2. **Public repository hygiene** — rejects internal or assistant-specific files.
 3. **Basic repository checks** — validates required files and runs OTP smoke tests.
 4. **AtomVM validation** — runs the AtomVM test using the official AtomVM 0.6.6 binary.
@@ -181,7 +181,23 @@ ESP-IDF build validation is available as a manually triggered workflow:
 scripts/release-check.sh v0.1.1 --with-esp-idf
 ```
 
-Manual ESP-IDF validation must pass before release tagging.
+Manual ESP-IDF validation requires a Docker-compatible container runtime and must pass before release tagging.
+
+## Contributing
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
+The short version:
+
+- keep changes focused and easy to review
+- include tests or docs when behavior changes
+- sign commits with `git commit -s`
+- run the relevant local checks before submitting
+- use a Docker-compatible runtime for ESP-IDF validation when required, such as Docker Desktop, OrbStack, Colima, Podman, or native Docker Engine
+
+## Code of Conduct
+
+Please read [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Be kind, direct, and constructive. Keep the public repository free from private operational material and assistant-specific files.
 
 ## Release
 
