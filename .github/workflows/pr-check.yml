@@ -96,12 +96,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          version="v$(cat VERSION)"
           test -s README.md
           test -s CHANGELOG.md
           test -s VERSION
           test -s LICENSE
           test -s docs/benchmarks.md
-          test -s docs/benchmarks/v0.1.1.md
+          test -s "docs/benchmarks/${version}.md"
           test -s scripts/bench.sh
           test -s scripts/release-check.sh
           test -s scripts/test-esp-idf.sh
