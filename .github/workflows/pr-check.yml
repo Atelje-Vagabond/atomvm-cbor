@@ -105,6 +105,18 @@ jobs:
           test -s scripts/bench.sh
           test -s scripts/release-check.sh
           test -s scripts/test-esp-idf.sh
+          test -s scripts/local-pre-push-check.sh
+          test -s scripts/install-git-hooks.sh
+
+      - name: Check shell syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh -n scripts/bench.sh
+          sh -n scripts/release-check.sh
+          sh -n scripts/test-esp-idf.sh
+          sh -n scripts/local-pre-push-check.sh
+          sh -n scripts/install-git-hooks.sh
 
       - name: Compile and run CBOR smoke test
         shell: bash
