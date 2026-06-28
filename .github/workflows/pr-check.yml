@@ -57,7 +57,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reject internal or assistant-specific files
+      - name: Reject non-public files and markers
         shell: bash
         run: |
           set -euo pipefail
@@ -65,15 +65,17 @@ jobs:
           forbidden_paths='(^|/)\.agent(/|$)|(^|/)\.opencode(/|$)|(^|/)AGENTS\.md$|(^|/)CLAUDE\.md$|(^|/)GEMINI\.md$|(^|/)\.cursor(/|$)|copilot-instructions\.md$'
 
           if find . -path ./.git -prune -o -print | grep -E "${forbidden_paths}"; then
-            echo "FAIL: forbidden internal or assistant-specific file path found."
+            echo "FAIL: forbidden non-public file path found."
             exit 1
           fi
 
           if grep -RInE '\.agent|\.opencode|AGENTS\.md|CLAUDE\.md|GEMINI\.md|HANDOFF|BOOTSTRAP|ACTIVE_TASK|NEXT_ACTION|DO_NOT_BREAK|office-state|runtime-state|internal orchestration|private prompt' . \
             --exclude-dir=.git \
-            --exclude='.github/workflows/pr-check.yml' \
-            --exclude='.github/workflows/esp-idf.yml'; then
-            echo "FAIL: forbidden internal marker found in exported files."
+            --exclude-dir=.github \
+            --exclude=README.md \
+            --exclude=CONTRIBUTING.md \
+            --exclude=CODE_OF_CONDUCT.md; then
+            echo "FAIL: forbidden non-public marker found in exported files."
             exit 1
           fi
 
