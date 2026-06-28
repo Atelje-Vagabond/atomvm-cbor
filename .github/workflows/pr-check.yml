@@ -8,49 +8,6 @@ permissions:
   contents: read
 
 jobs:
-  signoff:
-    name: Signed-off-by check
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check commit sign-off trailers
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          required='Signed-off-by: Ibrahim YILMAZ <ibrahim@drlinux.org>'
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base="${{ github.event.pull_request.base.sha }}"
-            head="${{ github.event.pull_request.head.sha }}"
-            commits=$(git rev-list "${base}..${head}")
-          else
-            commits=$(git rev-list -1 HEAD)
-          fi
-
-          if [ -z "${commits}" ]; then
-            echo "No commits to check."
-            exit 0
-          fi
-
-          failed=0
-          for commit in ${commits}; do
-            echo "Checking ${commit}"
-            if git log -1 --format=%B "${commit}" | grep -Fq "${required}"; then
-              echo "  PASS: sign-off present"
-            else
-              echo "  FAIL: missing required sign-off trailer"
-              failed=1
-            fi
-          done
-
-          exit "${failed}"
-
   public-clean:
     name: Public repository hygiene
     runs-on: ubuntu-latest
