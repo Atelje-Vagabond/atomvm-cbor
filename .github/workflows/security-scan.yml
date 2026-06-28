@@ -1,0 +1,98 @@
+name: Security Scan
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      workflows: ${{ steps.filter.outputs.workflows }}
+      scripts: ${{ steps.filter.outputs.scripts }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed areas
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            workflows:
+              - '.github/workflows/**'
+            scripts:
+              - 'scripts/**'
+
+  gitleaks:
+    name: Gitleaks scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+
+  workflow-lint:
+    name: GitHub Actions lint
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run actionlint
+        uses: rhysd/actionlint@v1
+
+  workflow-security:
+    name: GitHub Actions security scan
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install zizmor
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user zizmor
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run zizmor
+        shell: bash
+        run: |
+          set -euo pipefail
+          zizmor .github/workflows
+
+  shell-lint:
+    name: Shell script lint
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.scripts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          shellcheck scripts/*.sh
