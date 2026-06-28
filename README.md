@@ -168,12 +168,16 @@ atomvm /tmp/avm_cbor.beam /tmp/avm_cbor_atomvm.beam /path/to/atomvmlib.avm
 
 ## CI
 
-Pull requests run two jobs:
+This initial public release does not include GitHub Actions workflows yet.
 
-1. **basic** — doc existence, smoke tests on OTP 27
-2. **atomvm** — all tests validated on official AtomVM release binary
+Validation scripts are included and can be run locally:
 
-ESP-IDF firmware build validation is available as a manually triggered workflow.
+```bash
+scripts/release-check.sh v0.1.1
+scripts/release-check.sh v0.1.1 --with-esp-idf
+```
+
+ESP-IDF validation is manual for now. Public CI workflows will be added in a separate follow-up PR.
 
 ## Release
 
