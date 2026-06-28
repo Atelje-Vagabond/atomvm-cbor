@@ -36,20 +36,25 @@ DESCRIPTIONS = {
 
 
 def exports(source: str) -> list[str]:
-    m = re.search(r"-export\(\[(.*?)\]\)\.", source, re.S)
-    if not m:
+    match = re.search(r"-export\(\[(.*?)\]\)\.", source, re.S)
+    if not match:
         raise SystemExit("could not find -export block")
-    return re.findall(r"([a-zA-Z0-9_]+/\d+)", m.group(1))
+    return re.findall(r"([a-zA-Z0-9_]+/\d+)", match.group(1))
 
 
-def specs(source: str) -> dict[str, str]:
+def specs(source: str, public: list[str]) -> dict[str, str]:
     found = {}
-    for m in re.finditer(r"-spec\s+([a-zA-Z0-9_]+)\((.*?)\)\s*->\s*(.*?)\.", source, re.S):
-        name, args, ret = m.groups()
-        arity = 0 if not args.strip() else args.count(",") + 1
-        key = f"{name}/{arity}"
-        spec = f"{name}({re.sub(r'\\s+', ' ', args.strip())}) -> {re.sub(r'\\s+', ' ', ret.strip())}"
-        found[key] = spec
+    remaining = list(public)
+    pattern = r"-spec\s+([a-zA-Z0-9_]+)\((.*?)\)\s*->\s*(.*?)\."
+    for match in re.finditer(pattern, source, re.S):
+        name, args, ret = match.groups()
+        key = next((item for item in remaining if item.startswith(name + "/")), None)
+        if key is None:
+            continue
+        remaining.remove(key)
+        args = re.sub(r"\s+", " ", args.strip())
+        ret = re.sub(r"\s+", " ", ret.strip())
+        found[key] = f"{name}({args}) -> {ret}"
     return found
 
 
@@ -107,7 +112,8 @@ def main() -> int:
     args = parser.parse_args()
 
     source = SRC.read_text(encoding="utf-8")
-    generated = render(exports(source), specs(source))
+    public = exports(source)
+    generated = render(public, specs(source, public))
 
     if args.check:
         current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
