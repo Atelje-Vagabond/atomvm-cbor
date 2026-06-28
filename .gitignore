@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Local env / secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+
+# Build/cache examples
+node_modules/
+dist/
+build/
+.cache/
+tmp/
+erl_crash.dump
