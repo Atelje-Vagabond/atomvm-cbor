@@ -139,6 +139,47 @@ jobs:
           erlc -o /tmp/avm_cbor_test -pa /tmp/avm_cbor_test test/avm_cbor_smoke.erl
           erl -noshell -pa /tmp/avm_cbor_test -eval 'avm_cbor_smoke:run().'
 
+
+  gitleaks:
+    name: Gitleaks scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$(
+            curl -sSfL https://api.github.com/repos/gitleaks/gitleaks/releases/latest \
+              | jq -r '.assets[]
+                | select(.name | test("linux_(x64|amd64).*\\.tar\\.gz$"))
+                | .browser_download_url' \
+              | head -n 1
+          )"
+
+          if [ -z "${url}" ]; then
+            echo "Could not resolve Gitleaks Linux tarball URL."
+            exit 1
+          fi
+
+          curl -sSfL "${url}" -o /tmp/gitleaks.tar.gz
+          mkdir -p /tmp/gitleaks
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp/gitleaks
+          chmod +x /tmp/gitleaks/gitleaks
+          /tmp/gitleaks/gitleaks version
+
+      - name: Run Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          /tmp/gitleaks/gitleaks detect --source . --no-git --redact --verbose
+
+
   atomvm:
     name: AtomVM validation
     runs-on: ubuntu-latest
