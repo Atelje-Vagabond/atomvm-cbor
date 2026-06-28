@@ -1,0 +1,150 @@
+name: PR Check
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signoff:
+    name: Signed-off-by check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check commit sign-off trailers
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required='Signed-off-by: Ibrahim YILMAZ <ibrahim@drlinux.org>'
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+            commits=$(git rev-list "${base}..${head}")
+          else
+            commits=$(git rev-list -1 HEAD)
+          fi
+
+          if [ -z "${commits}" ]; then
+            echo "No commits to check."
+            exit 0
+          fi
+
+          failed=0
+          for commit in ${commits}; do
+            echo "Checking ${commit}"
+            if git log -1 --format=%B "${commit}" | grep -Fq "${required}"; then
+              echo "  PASS: sign-off present"
+            else
+              echo "  FAIL: missing required sign-off trailer"
+              failed=1
+            fi
+          done
+
+          exit "${failed}"
+
+  public-clean:
+    name: Public repository hygiene
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reject internal or assistant-specific files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          forbidden_paths='(^|/)\.agent(/|$)|(^|/)\.opencode(/|$)|(^|/)AGENTS\.md$|(^|/)CLAUDE\.md$|(^|/)GEMINI\.md$|(^|/)\.cursor(/|$)|copilot-instructions\.md$'
+
+          if find . -path ./.git -prune -o -print | grep -E "${forbidden_paths}"; then
+            echo "FAIL: forbidden internal or assistant-specific file path found."
+            exit 1
+          fi
+
+          if grep -RInE '\.agent|\.opencode|AGENTS\.md|CLAUDE\.md|GEMINI\.md|HANDOFF|BOOTSTRAP|ACTIVE_TASK|NEXT_ACTION|DO_NOT_BREAK|office-state|runtime-state|internal orchestration|private prompt|BEGIN OPENSSH|BEGIN RSA|BEGIN EC|BEGIN PRIVATE KEY|PRIVATE KEY|CLOUDFLARE|ANSIBLE|VAULT' . \
+            --exclude-dir=.git \
+            --exclude='.github/workflows/pr-check.yml' \
+            --exclude='.github/workflows/esp-idf.yml'; then
+            echo "FAIL: forbidden internal marker found in exported files."
+            exit 1
+          fi
+
+          echo "PASS: public hygiene check passed."
+
+  basic:
+    name: Basic repository checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Erlang/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: 27
+
+      - name: Check required public project files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s README.md
+          test -s CHANGELOG.md
+          test -s VERSION
+          test -s LICENSE
+          test -s docs/benchmarks.md
+          test -s docs/benchmarks/v0.1.1.md
+          test -s scripts/bench.sh
+          test -s scripts/release-check.sh
+          test -s scripts/test-esp-idf.sh
+
+      - name: Compile and run CBOR smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/avm_cbor_test
+          erlc -o /tmp/avm_cbor_test src/avm_cbor.erl
+          erlc -o /tmp/avm_cbor_test -pa /tmp/avm_cbor_test test/avm_cbor_smoke.erl
+          erl -noshell -pa /tmp/avm_cbor_test -eval 'avm_cbor_smoke:run().'
+
+  atomvm:
+    name: AtomVM validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Erlang/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: 25
+
+      - name: Download AtomVM binary and lib
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/atomvm
+          curl -sL -o /tmp/atomvm/atomvm \
+            "https://github.com/atomvm/AtomVM/releases/download/v0.6.6/AtomVM-linux-x86_64-static-mbedtls-v0.6.6"
+          curl -sL -o /tmp/atomvm/atomvmlib.avm \
+            "https://github.com/atomvm/AtomVM/releases/download/v0.6.6/atomvmlib-v0.6.6.avm"
+          chmod +x /tmp/atomvm/atomvm
+
+      - name: Compile and run AtomVM test
+        shell: bash
+        run: |
+          set -euo pipefail
+          erlc -o /tmp src/avm_cbor.erl
+          erlc -o /tmp test/avm_cbor_atomvm.erl
+          /tmp/atomvm/atomvm /tmp/avm_cbor.beam /tmp/avm_cbor_atomvm.beam /tmp/atomvm/atomvmlib.avm
