@@ -101,9 +101,11 @@ jobs:
           test -s CHANGELOG.md
           test -s VERSION
           test -s LICENSE
+          test -s docs/api.md
           test -s docs/benchmarks.md
           test -s "docs/benchmarks/${version}.md"
           test -s scripts/bench.sh
+          test -s scripts/gen-api-docs.py
           test -s scripts/release-check.sh
           test -s scripts/test-esp-idf.sh
           test -s scripts/local-pre-push-check.sh
@@ -118,6 +120,13 @@ jobs:
           sh -n scripts/test-esp-idf.sh
           sh -n scripts/local-pre-push-check.sh
           sh -n scripts/install-git-hooks.sh
+          python3 -m py_compile scripts/gen-api-docs.py
+
+      - name: Check generated API docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/gen-api-docs.py --check
 
       - name: Compile and run CBOR smoke test
         shell: bash
