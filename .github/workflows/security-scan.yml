@@ -36,10 +36,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
+
+      - name: Install Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install github.com/gitleaks/gitleaks/v8@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          gitleaks detect --source . --no-git --redact --verbose
 
   workflow-lint:
     name: GitHub Actions lint
