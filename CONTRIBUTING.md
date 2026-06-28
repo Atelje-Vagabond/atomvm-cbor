@@ -29,6 +29,12 @@ Signed-off-by: Your Name <you@example.com>
 
 It does not require a maintainer-specific identity.
 
+## Code owner review
+
+All pull requests require review from the project code owner before merge.
+
+The code owner is defined in `.github/CODEOWNERS`.
+
 ## Required tools
 
 For normal development and smoke testing, you need:
@@ -98,6 +104,18 @@ Run benchmarks:
 scripts/bench.sh
 ```
 
+Generate API documentation:
+
+```bash
+python3 scripts/gen-api-docs.py
+```
+
+Check generated API documentation:
+
+```bash
+python3 scripts/gen-api-docs.py --check
+```
+
 Run release checks:
 
 ```bash
@@ -109,6 +127,12 @@ Run release checks with ESP-IDF validation when a suitable container runtime is 
 ```bash
 scripts/release-check.sh v0.1.1 --with-esp-idf
 ```
+
+## API documentation
+
+The public API reference is generated into `docs/api.md` from the exported functions and specs in `src/avm_cbor.erl`.
+
+When a public function is added, removed, or changed, update the generator descriptions if needed and regenerate the API reference.
 
 ## Benchmark notes
 
