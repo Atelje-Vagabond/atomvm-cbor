@@ -168,16 +168,20 @@ atomvm /tmp/avm_cbor.beam /tmp/avm_cbor_atomvm.beam /path/to/atomvmlib.avm
 
 ## CI
 
-This initial public release does not include GitHub Actions workflows yet.
+Pull requests run public-safe checks:
 
-Validation scripts are included and can be run locally:
+1. **Signed-off-by check** — verifies commits contain the required sign-off trailer.
+2. **Public repository hygiene** — rejects internal or assistant-specific files.
+3. **Basic repository checks** — validates required files and runs OTP smoke tests.
+4. **AtomVM validation** — runs the AtomVM test using the official AtomVM 0.6.6 binary.
+
+ESP-IDF build validation is available as a manually triggered workflow:
 
 ```bash
-scripts/release-check.sh v0.1.1
 scripts/release-check.sh v0.1.1 --with-esp-idf
 ```
 
-ESP-IDF validation is manual for now. Public CI workflows will be added in a separate follow-up PR.
+Manual ESP-IDF validation must pass before release tagging.
 
 ## Release
 
