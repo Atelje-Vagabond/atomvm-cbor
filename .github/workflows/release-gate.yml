@@ -18,7 +18,7 @@ env:
 jobs:
   hygiene:
     name: Public hygiene and secrets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
       - name: Checkout exact source
@@ -57,7 +57,7 @@ jobs:
 
   otp:
     name: OTP ${{ matrix.otp }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -87,7 +87,7 @@ jobs:
 
   coverage:
     name: Coverage (95% line and branch)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
       - name: Checkout exact source
@@ -121,7 +121,7 @@ jobs:
 
   performance:
     name: v0.1.0 performance gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
       - name: Checkout exact source and historical tags
@@ -147,7 +147,7 @@ jobs:
 
   atomvm:
     name: AtomVM 0.6.6
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
       - name: Checkout exact source
@@ -173,7 +173,7 @@ jobs:
 
   esp-idf:
     name: ESP-IDF ${{ matrix.idf }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -191,7 +191,7 @@ jobs:
 
   package:
     name: Hex package, docs, and consumers
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 25
     steps:
       - name: Checkout exact source
@@ -259,6 +259,6 @@ jobs:
   release-ready:
     name: Exact-head release gate
     needs: [hygiene, otp, coverage, performance, atomvm, esp-idf, package]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - run: echo "PUBLIC_RELEASE_GATE_OK"

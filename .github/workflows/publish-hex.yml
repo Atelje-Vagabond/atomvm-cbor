@@ -11,7 +11,7 @@ jobs:
   preflight:
     name: Tag and public preflight
     if: github.ref == 'refs/tags/0.2.0'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 25
     steps:
       - name: Checkout selected tag
@@ -78,7 +78,7 @@ jobs:
   publish:
     name: Publish package, HexDocs, and GitHub release
     needs: preflight
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 25
     environment: hex-production
     permissions:
