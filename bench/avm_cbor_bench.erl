@@ -1,65 +1,57 @@
 -module(avm_cbor_bench).
 -export([run/0]).
 
--define(DEFAULT_ITERATIONS, 100000).
+-define(ITERATIONS, 10000).
 
 run() ->
-    Iterations = get_iterations(),
     io:format("~nAtomVM CBOR Benchmark~n"),
-    io:format("====================~n"),
-    io:format("Iterations: ~w~n~n", [Iterations]),
+    io:format("====================~n~n"),
     io:format("~-25s | ~10s | ~8s | ~8s~n", ["Workload", "Iterations", "Total ms", "Ops/sec"]),
     io:format("~-25s-|------------|----------|--------~n", ["------------------------"]),
-    warmup(Iterations),
-    bench("decode_unsigned_small",  fun bench_decode_unsigned_small/0, Iterations),
-    bench("encode_unsigned_small",  fun bench_encode_unsigned_small/0, Iterations),
-    bench("decode_text_utf8",       fun bench_decode_text_utf8/0, Iterations),
-    bench("encode_text_utf8",       fun bench_encode_text_utf8/0, Iterations),
-    bench("decode_ble_map",         fun bench_decode_ble_map/0, Iterations),
-    bench("encode_ble_map",         fun bench_encode_ble_map/0, Iterations),
-    bench("decode_nested_map",      fun bench_decode_nested_map/0, Iterations),
-    bench("encode_nested_map",      fun bench_encode_nested_map/0, Iterations),
-    bench("decode_tags",            fun bench_decode_tags/0, Iterations),
-    bench("encode_tags",            fun bench_encode_tags/0, Iterations),
-    bench("decode_sequence_10",     fun bench_decode_sequence_10/0, Iterations),
-    bench("decode_indefinite_array", fun bench_decode_indefinite_array/0, Iterations),
+    warmup(),
+    bench("decode_unsigned_small",  fun bench_decode_unsigned_small/0),
+    bench("encode_unsigned_small",  fun bench_encode_unsigned_small/0),
+    bench("decode_text_utf8",       fun bench_decode_text_utf8/0),
+    bench("encode_text_utf8",       fun bench_encode_text_utf8/0),
+    bench("decode_ble_map",         fun bench_decode_ble_map/0),
+    bench("encode_ble_map",         fun bench_encode_ble_map/0),
+    bench("decode_nested_map",      fun bench_decode_nested_map/0),
+    bench("encode_nested_map",      fun bench_encode_nested_map/0),
+    bench("decode_tags",            fun bench_decode_tags/0),
+    bench("encode_tags",            fun bench_encode_tags/0),
+    bench("decode_sequence_10",     fun bench_decode_sequence_10/0),
+    bench("decode_indefinite_array", fun bench_decode_indefinite_array/0),
     io:format("~n"),
-    halt(0).
-
-get_iterations() ->
-    case os:getenv("BENCH_ITERATIONS") of
-        false -> ?DEFAULT_ITERATIONS;
-        "" -> ?DEFAULT_ITERATIONS;
-        Str ->
-            try list_to_integer(Str) of
-                N when N > 0 -> N;
-                _ -> ?DEFAULT_ITERATIONS
-            catch
-                error:_ -> ?DEFAULT_ITERATIONS
-            end
-    end.
-
-warmup(Iterations) ->
-    WarmupN = min(Iterations, 1000),
-    _ = run_n(fun bench_decode_unsigned_small/0, WarmupN),
-    _ = run_n(fun bench_encode_unsigned_small/0, WarmupN),
-    _ = run_n(fun bench_decode_text_utf8/0, WarmupN),
-    _ = run_n(fun bench_encode_text_utf8/0, WarmupN),
-    _ = run_n(fun bench_decode_ble_map/0, WarmupN),
     ok.
 
-bench(Name, F, Iterations) ->
-    _ = run_n(F, 100),
+warmup() ->
+    _ = F = fun() ->
+        _ = avm_cbor:decode(<<24, 42>>),
+        _ = avm_cbor:encode(42),
+        _ = avm_cbor:decode(<<16#65, "hello">>),
+        _ = avm_cbor:encode({text, <<"hello">>}),
+        _ = avm_cbor:decode(<<
+            16#A4,
+            16#01, 16#68, "set_wifi",
+            16#02, 16#66, "MySSID",
+            16#03, 16#46, "secret",
+            16#04, 16#F5
+        >>)
+    end,
+    _ = F(),
+    _ = F(),
+    _ = F(),
+    ok.
+
+bench(Name, F) ->
+    _ = F(),
     T0 = erlang:monotonic_time(microsecond),
-    _ = run_n(F, Iterations),
+    run_n(F, ?ITERATIONS),
     T1 = erlang:monotonic_time(microsecond),
     TotalUs = T1 - T0,
     TotalMs = TotalUs / 1000,
-    OpsSec =
-        if TotalUs =< 0 -> 0;
-           true -> (Iterations * 1000000) div TotalUs
-        end,
-    io:format("~-25s | ~10w | ~8.1f | ~8w~n", [Name, Iterations, TotalMs, OpsSec]).
+    OpsSec = (?ITERATIONS * 1000000) div TotalUs,
+    io:format("~-25s | ~10w | ~8.1f | ~8w~n", [Name, ?ITERATIONS, TotalMs, OpsSec]).
 
 run_n(_F, 0) -> ok;
 run_n(F, N) -> F(), run_n(F, N - 1).

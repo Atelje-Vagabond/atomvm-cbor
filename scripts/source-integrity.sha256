@@ -1,0 +1,3 @@
+1192f9bb03ee349b959e60364523adc6e47b5ed33163df72026ca35009c5f31a  src/avm_cbor.erl
+e9cbec0626437753b9e41393b826c269de3baf90f5cc3e5c4e78fa7c3b5dd720  src/avm_cbor_partial.erl
+ccb1fc736bdadf345f3e6bae6c07e08fe4c3efddca101259de220649e536d223  src/avm_cbor_opts.hrl

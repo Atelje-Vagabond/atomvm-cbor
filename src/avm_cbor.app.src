@@ -1,0 +1,22 @@
+{application, avm_cbor, [
+    {description, "Compact RFC 8949 CBOR encoder/decoder for AtomVM and constrained Erlang runtimes."},
+    {vsn, "0.2.0"},
+    {pkg_name, atomvm_cbor},
+    {modules, [avm_cbor, avm_cbor_partial]},
+    {registered, []},
+    {applications, [kernel, stdlib]},
+    {env, []},
+    {licenses, ["MIT"]},
+    {links, [
+        {"GitHub", "https://github.com/Atelje-Vagabond/atomvm-cbor"}
+    ]},
+    {files, [
+        "src",
+        "rebar.config",
+        "VERSION",
+        "README.md",
+        "CHANGELOG.md",
+        "LICENSE",
+        "docs/api.md"
+    ]}
+]}.

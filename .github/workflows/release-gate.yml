@@ -1,0 +1,264 @@
+name: Public Release Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "0.2.0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  hygiene:
+    name: Public hygiene and secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Require signed-off pull-request commits
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          for commit in $(git rev-list "${BASE_SHA}..HEAD"); do
+            git log -1 --format=%B "${commit}" | grep -Eq '^Signed-off-by: .+ <[^<>[:space:]]+>$' || {
+              echo "missing Signed-off-by trailer on ${commit}" >&2
+              exit 1
+            }
+          done
+      - name: Check public boundaries and release metadata
+        run: |
+          set -euo pipefail
+          bash scripts/check-public-hygiene.sh
+          bash scripts/check-release-metadata.sh
+      - name: Install checksum-pinned Gitleaks
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
+          curl -fsSL "${url}" -o /tmp/gitleaks.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum --check
+          mkdir /tmp/gitleaks
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp/gitleaks
+          /tmp/gitleaks/gitleaks detect --source . --no-git --redact --verbose
+
+  otp:
+    name: OTP ${{ matrix.otp }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        otp: ["25", "27"]
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Install Erlang and Rebar3
+        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        with:
+          otp-version: ${{ matrix.otp }}
+          rebar3-version: "3.25.1"
+      - name: Compile and test
+        run: |
+          set -euo pipefail
+          rebar3 compile
+          bash scripts/test-public.sh
+          rebar3 xref
+      - name: Dialyzer
+        if: matrix.otp == '27'
+        run: rebar3 dialyzer
+
+  coverage:
+    name: Coverage (95% line and branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Install Erlang and Rebar3
+        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        with:
+          otp-version: "27"
+          rebar3-version: "3.25.1"
+      - name: Enforce true coverage gate
+        env:
+          COVERAGE_THRESHOLD: "95"
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p coverage
+          if [ -n "${BASE_SHA}" ]; then
+            base="$(git merge-base HEAD "${BASE_SHA}")"
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            base="HEAD^"
+          else
+            base="HEAD"
+          fi
+          git diff --output=coverage/changed.diff --unified=0 "${base}" -- src/avm_cbor.erl src/avm_cbor_partial.erl
+          COVERAGE_DIFF_FILE=coverage/changed.diff bash scripts/coverage-gate.sh
+
+  performance:
+    name: v0.1.0 performance gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source and historical tags
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Install Erlang
+        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        with:
+          otp-version: "29"
+      - name: Prove fail-closed threshold behavior
+        run: bash scripts/test-benchmark-regression-gate.sh
+      - name: Compare exact historical baseline
+        env:
+          BENCHMARK_NOISE_TOLERANCE_PERCENT: "5"
+        run: |
+          set -euo pipefail
+          bash scripts/benchmark-remediation.sh 2>&1 | tee /tmp/performance-gate.log
+          grep -F 'PERFORMANCE_GATE_OK noise_tolerance_percent=5.00' /tmp/performance-gate.log
+
+  atomvm:
+    name: AtomVM 0.6.6
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Install Erlang
+        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        with:
+          otp-version: "25"
+      - name: Download checksum-verified AtomVM
+        run: |
+          set -euo pipefail
+          mkdir /tmp/atomvm
+          curl -fsSL -o /tmp/atomvm/atomvm https://github.com/atomvm/AtomVM/releases/download/v0.6.6/AtomVM-linux-x86_64-static-mbedtls-v0.6.6
+          curl -fsSL -o /tmp/atomvm/atomvmlib.avm https://github.com/atomvm/AtomVM/releases/download/v0.6.6/atomvmlib-v0.6.6.avm
+          echo "ddc739b21f386a65679a58c8e16ac6b092bbc7fa2f873fdbbf50c2033ae29858  /tmp/atomvm/atomvm" | sha256sum --check
+          echo "f8839044c15986f62fae9820c34b93cc6cb491361bb9fd9fefde56b4a711a312  /tmp/atomvm/atomvmlib.avm" | sha256sum --check
+          chmod +x /tmp/atomvm/atomvm
+          ATOMVM=/tmp/atomvm/atomvm ATOMVMLIB=/tmp/atomvm/atomvmlib.avm bash scripts/test-atomvm.sh
+
+  esp-idf:
+    name: ESP-IDF ${{ matrix.idf }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        idf: ["v5.4.3", "v5.5.2"]
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Build official AtomVM 0.6.6 with ESP-IDF
+        run: bash scripts/test-esp-idf.sh "${{ matrix.idf }}"
+
+  package:
+    name: Hex package, docs, and consumers
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Install Erlang, Elixir, and Rebar3
+        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+          rebar3-version: "3.25.1"
+      - name: Generate and inspect HexDocs
+        run: |
+          set -euo pipefail
+          python3 scripts/gen-api-docs.py --check
+          rebar3 ex_doc
+          index="$(find . -type f -name index.html | grep -E '(^|/)doc/index.html$' | grep -v '/plugins/' | head -n 1)"
+          test -n "${index}"
+          docs_dir="$(dirname "${index}")"
+          grep -RFl 'github.com/Atelje-Vagabond/atomvm-cbor' "${docs_dir}" >/dev/null
+          grep -REl '/(blob|tree)/0\.2\.0/' "${docs_dir}" >/dev/null
+          echo "DOCS_DIR=${docs_dir}" >> "${GITHUB_ENV}"
+      - name: Build and dry-run package
+        env:
+          HEX_API_KEY: "00000000000000000000000000000000"
+        run: |
+          set -euo pipefail
+          rebar3 hex build
+          rebar3 hex build --unpack
+          rebar3 hex publish --repo hexpm --dry-run --yes
+          package_dir="$(find _build -type d -name 'atomvm_cbor-0.2.0' -print -quit)"
+          test -n "${package_dir}"
+          bash scripts/check-hex-package.sh "${package_dir}"
+          package_tar="$(find _build -type f -name 'atomvm_cbor-0.2.0.tar' -print -quit)"
+          test -n "${package_tar}"
+          test "$(stat -c %s "${package_tar}")" -le 262144
+          tar -czf /tmp/atomvm_cbor-0.2.0-docs.tar.gz -C "${DOCS_DIR}" .
+          test "$(stat -c %s /tmp/atomvm_cbor-0.2.0-docs.tar.gz)" -le 524288
+          test "$(du -sb "${DOCS_DIR}" | cut -f1)" -le 2097152
+          test "$(du -sb "${package_dir}" | cut -f1)" -le 1048576
+          echo "PACKAGE_DIR=${package_dir}" >> "${GITHUB_ENV}"
+      - name: Compile clean Rebar3 consumer
+        run: |
+          set -euo pipefail
+          consumer="$(mktemp -d)"
+          mkdir -p "${consumer}/src" "${consumer}/_checkouts"
+          cp -a "${PACKAGE_DIR}" "${consumer}/_checkouts/avm_cbor"
+          printf '{erl_opts, [debug_info]}.\n{deps, [{avm_cbor, "~> 0.2.0", {pkg, atomvm_cbor}}]}.\n' > "${consumer}/rebar.config"
+          printf '{application, rebar_consumer, [{vsn, "0.1.0"}, {modules, [rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/rebar_consumer.app.src"
+          printf -- '-module(rebar_consumer).\n-export([run/0]).\nrun() -> avm_cbor:decode(<<1>>).\n' > "${consumer}/src/rebar_consumer.erl"
+          (cd "${consumer}" && rebar3 compile)
+      - name: Compile clean Mix consumer
+        run: |
+          set -euo pipefail
+          consumer="$(mktemp -d)"
+          mkdir -p "${consumer}/lib"
+          cp -a "${PACKAGE_DIR}" "${consumer}/avm_cbor_package"
+          printf 'defmodule MixConsumer.MixProject do\n  use Mix.Project\n  def project, do: [app: :mix_consumer, version: "0.1.0", deps: [{:avm_cbor, path: "avm_cbor_package"}]]\n  def application, do: [extra_applications: [:avm_cbor]]\nend\n' > "${consumer}/mix.exs"
+          printf 'defmodule MixConsumer do\n  def run, do: :avm_cbor.decode(<<1>>)\nend\n' > "${consumer}/lib/mix_consumer.ex"
+          (cd "${consumer}" && mix deps.get && mix compile --warnings-as-errors)
+
+  release-ready:
+    name: Exact-head release gate
+    needs: [hygiene, otp, coverage, performance, atomvm, esp-idf, package]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "PUBLIC_RELEASE_GATE_OK"

@@ -20,6 +20,18 @@ python3 scripts/gen-api-docs.py
 | `decode_sequence/2` | Decode as many complete CBOR items as possible using explicit options. |
 | `encode/1` | Encode one supported Erlang value using default options. |
 | `encode/2` | Encode one supported Erlang value using explicit options. |
+| `partial_decode/1` | Validate and measure one CBOR item without eagerly constructing nested terms. |
+| `partial_decode/2` | Partially decode one CBOR item using explicit options. |
+| `partial_value_bytes/1` | Return the complete encoded bytes represented by a partial descriptor. |
+| `partial_deep_decode/1` | Materialize the value represented by a partial descriptor. |
+| `partial_skip/1` | Discard a validated partial descriptor. |
+| `partial_type/1` | Return the CBOR category represented by a partial descriptor. |
+| `partial_count/1` | Return an array item count or map pair count. |
+| `partial_tag/1` | Return the semantic tag number from a tag descriptor. |
+| `partial_size/1` | Return the content size of a byte or text string descriptor. |
+| `partial_offset/1` | Return the descriptor item offset. |
+| `partial_length/1` | Return the complete encoded length of a descriptor item. |
+| `partial_contents/1` | Return encoded child bytes for an array, map, or tag. |
 | `get/2` | Look up a key in a decoded CBOR map. |
 | `get/3` | Look up a key in a decoded CBOR map with a default. |
 | `require/2` | Require a key in a decoded CBOR map. |
@@ -38,7 +50,7 @@ Decode one CBOR item using default options.
 **Spec**
 
 ```erlang
-decode(binary()) -> decode_result()
+decode(term()) -> decode_result()
 ```
 
 **What it does**
@@ -56,7 +68,7 @@ Decode one CBOR item using explicit options.
 **Spec**
 
 ```erlang
-decode(binary(), list()) -> decode_result()
+decode(term(), term()) -> decode_result()
 ```
 
 **What it does**
@@ -74,7 +86,7 @@ Decode a complete CBOR sequence using default options.
 **Spec**
 
 ```erlang
-decode_all(binary()) -> {ok, list()} | {error, term()}
+decode_all(term()) -> {ok, list()} | {error, term()}
 ```
 
 **What it does**
@@ -92,7 +104,7 @@ Decode a complete CBOR sequence using explicit options.
 **Spec**
 
 ```erlang
-decode_all(binary(), list()) -> {ok, list()} | {error, term()}
+decode_all(term(), term()) -> {ok, list()} | {error, term()}
 ```
 
 **What it does**
@@ -110,7 +122,7 @@ Decode as many complete CBOR items as possible using default options.
 **Spec**
 
 ```erlang
-decode_sequence(binary()) -> {ok, list(), binary()} | {error, term()}
+decode_sequence(term()) -> {ok, list(), binary()} | {error, term()}
 ```
 
 **What it does**
@@ -128,7 +140,7 @@ Decode as many complete CBOR items as possible using explicit options.
 **Spec**
 
 ```erlang
-decode_sequence(binary(), list()) -> {ok, list(), binary()} | {error, term()}
+decode_sequence(term(), term()) -> {ok, list(), binary()} | {error, term()}
 ```
 
 **What it does**
@@ -151,11 +163,11 @@ encode(term()) -> encode_result()
 
 **What it does**
 
-Produces a definite-length CBOR binary for the supported public value representation.
+Produces definite-length CBOR for the documented public term representation.
 
 **What it is not**
 
-It does not produce canonical CBOR or half-precision float output.
+It does not enable preferred or deterministic encoding unless requested with encode/2.
 
 ### `encode/2`
 
@@ -169,11 +181,227 @@ encode(term(), list()) -> encode_result()
 
 **What it does**
 
-Applies caller-provided limits and feature flags while encoding.
+Supports preferred and deterministic serialization while enforcing caller-provided limits.
 
 **What it is not**
 
 It does not support arbitrary Erlang terms outside the documented representation.
+
+### `partial_decode/1`
+
+Validate and measure one CBOR item without eagerly constructing nested terms.
+
+**Spec**
+
+```erlang
+partial_decode(term()) -> {ok, term(), binary()} | {error, term()}
+```
+
+**What it does**
+
+Returns an opaque descriptor and trailing bytes using constrained partial-path defaults.
+
+**What it is not**
+
+The descriptor layout is private; use the partial_* accessors.
+
+### `partial_decode/2`
+
+Partially decode one CBOR item using explicit options.
+
+**Spec**
+
+```erlang
+partial_decode(term(), term()) -> {ok, term(), binary()} | {error, term()}
+```
+
+**What it does**
+
+Applies decode limits, deterministic/preferred checks, and the partial max_string_size limit.
+
+**What it is not**
+
+It does not bypass validation simply because nested terms are deferred.
+
+### `partial_value_bytes/1`
+
+Return the complete encoded bytes represented by a partial descriptor.
+
+**Spec**
+
+```erlang
+partial_value_bytes(term()) -> binary() | {error, term()}
+```
+
+**What it does**
+
+Returns the validated item as a sub-binary.
+
+**What it is not**
+
+It does not return only the child contents; use partial_contents/1 for that.
+
+### `partial_deep_decode/1`
+
+Materialize the value represented by a partial descriptor.
+
+**Spec**
+
+```erlang
+partial_deep_decode(term()) -> {ok, term()} | {error, term()}
+```
+
+**What it does**
+
+Fully decodes the validated item only when the caller needs it.
+
+**What it is not**
+
+It does not accept forged or malformed descriptors.
+
+### `partial_skip/1`
+
+Discard a validated partial descriptor.
+
+**Spec**
+
+```erlang
+partial_skip(term()) -> ok | {error, term()}
+```
+
+**What it does**
+
+Returns ok after validating that the value is a descriptor.
+
+**What it is not**
+
+It does not scan or materialize the represented value again.
+
+### `partial_type/1`
+
+Return the CBOR category represented by a partial descriptor.
+
+**Spec**
+
+```erlang
+partial_type(term()) -> atom() | {error, term()}
+```
+
+**What it does**
+
+Reports unsigned, negative, bytes, text, array, map, tag, float, or simple.
+
+**What it is not**
+
+It does not return an Erlang runtime type.
+
+### `partial_count/1`
+
+Return an array item count or map pair count.
+
+**Spec**
+
+```erlang
+partial_count(term()) -> non_neg_integer() | undefined | {error, term()}
+```
+
+**What it does**
+
+Returns undefined for descriptor types without a count.
+
+**What it is not**
+
+It does not count nested descendants.
+
+### `partial_tag/1`
+
+Return the semantic tag number from a tag descriptor.
+
+**Spec**
+
+```erlang
+partial_tag(term()) -> non_neg_integer() | undefined | {error, term()}
+```
+
+**What it does**
+
+Returns undefined for non-tag descriptors.
+
+**What it is not**
+
+It does not interpret tag semantics.
+
+### `partial_size/1`
+
+Return the content size of a byte or text string descriptor.
+
+**Spec**
+
+```erlang
+partial_size(term()) -> non_neg_integer() | undefined | {error, term()}
+```
+
+**What it does**
+
+Reports the content byte length and returns undefined for other descriptor types.
+
+**What it is not**
+
+It does not report the complete encoded item length.
+
+### `partial_offset/1`
+
+Return the descriptor item offset.
+
+**Spec**
+
+```erlang
+partial_offset(term()) -> non_neg_integer() | {error, term()}
+```
+
+**What it does**
+
+Reports the start offset recorded for the represented item.
+
+**What it is not**
+
+It does not return a child index.
+
+### `partial_length/1`
+
+Return the complete encoded length of a descriptor item.
+
+**Spec**
+
+```erlang
+partial_length(term()) -> non_neg_integer() | {error, term()}
+```
+
+**What it does**
+
+Includes the CBOR header and any break marker.
+
+**What it is not**
+
+It does not return only string content length.
+
+### `partial_contents/1`
+
+Return encoded child bytes for an array, map, or tag.
+
+**Spec**
+
+```erlang
+partial_contents(term()) -> {ok, binary()} | {error, term()}
+```
+
+**What it does**
+
+The returned binary can be walked with repeated partial_decode calls.
+
+**What it is not**
+
+It does not deep-decode the children.
 
 ### `get/2`
 
