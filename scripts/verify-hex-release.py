@@ -10,7 +10,7 @@ import urllib.request
 PACKAGE = "atomvm_cbor"
 APP = "avm_cbor"
 VERSION = "0.2.0"
-ORGANIZATION = "atelje-vagabond"
+ORGANIZATION = "ateljevagabond"
 API = f"https://hex.pm/api/packages/{PACKAGE}"
 
 
