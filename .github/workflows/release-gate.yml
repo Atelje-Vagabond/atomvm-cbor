@@ -167,7 +167,7 @@ jobs:
       - name: Download checksum-verified AtomVM
         run: |
           set -euo pipefail
-          mkdir /tmp/atomvm
+          mkdir -p /tmp/atomvm
           curl -fsSL -o /tmp/atomvm/atomvm https://github.com/atomvm/AtomVM/releases/download/v0.6.6/AtomVM-linux-x86_64-static-mbedtls-v0.6.6
           curl -fsSL -o /tmp/atomvm/atomvmlib.avm https://github.com/atomvm/AtomVM/releases/download/v0.6.6/atomvmlib-v0.6.6.avm
           echo "ddc739b21f386a65679a58c8e16ac6b092bbc7fa2f873fdbbf50c2033ae29858  /tmp/atomvm/atomvm" | sha256sum --check
