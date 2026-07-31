@@ -143,6 +143,10 @@ if not re.search(r"^    if: always\(\)$", release_ready, re.MULTILINE):
 if "PUBLIC_RELEASE_GATE_OK" not in release_ready:
     raise SystemExit("release-ready success marker is missing")
 
+package = job("package")
+if package.count("warning: documentation references file") != 2:
+    raise SystemExit("package validation must reject broken HexDocs file references")
+
 print("Release workflow routing, order, and unchanged 5 percent threshold passed.")
 PY
 

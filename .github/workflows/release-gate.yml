@@ -301,7 +301,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/gen-api-docs.py --check
-          rebar3 ex_doc
+          rebar3 ex_doc 2>&1 | tee /tmp/ex-doc.log
+          if grep -F 'warning: documentation references file' /tmp/ex-doc.log; then
+            echo 'generated HexDocs contain a broken file reference' >&2
+            exit 1
+          fi
           index="$(find . -type f -name index.html | grep -E '(^|/)doc/index.html$' | grep -v '/plugins/' | head -n 1)"
           test -n "${index}"
           docs_dir="$(dirname "${index}")"
@@ -319,7 +323,11 @@ jobs:
           set -euo pipefail
           rebar3 hex build
           rebar3 hex build --unpack
-          rebar3 hex publish --repo hexpm --dry-run --yes
+          rebar3 hex publish --repo hexpm --dry-run --yes 2>&1 | tee /tmp/hex-dry-run.log
+          if grep -F 'warning: documentation references file' /tmp/hex-dry-run.log; then
+            echo 'Hex dry-run documentation contains a broken file reference' >&2
+            exit 1
+          fi
           package_dir="$(find _build -type d -name "atomvm_cbor-${RELEASE_VERSION}" -print -quit)"
           test -n "${package_dir}"
           bash scripts/check-hex-package.sh "${package_dir}"
