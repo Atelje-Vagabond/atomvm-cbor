@@ -16,7 +16,7 @@ case "${idf_version}" in
 esac
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-atomvm_commit="b81eca210440cf37338e3ac6d4e84c1d0614b8b3"
+atomvm_commit="ff993a80963298b532c1e573f883951ecaac9fef"
 
 docker run --rm \
     -e IDF_VERSION="${idf_version}" \

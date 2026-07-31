@@ -6,7 +6,7 @@
 
 A compact RFC 8949 CBOR encoder and decoder for AtomVM and constrained Erlang runtimes. It is pure Erlang, has no runtime dependencies, NIFs, or ports, and preserves the public `{text, Binary}` and `{map, Pairs}` representations.
 
-Version 0.2.0 is the first Hex.pm release. Historical Git tag `v0.1.0` remains a source and benchmark baseline only and was never published to Hex.
+Version 0.2.0 is the first Hex.pm release. Public Git tag `v0.1.1` is the reproducible source and benchmark baseline and was never published to Hex.
 
 ## Installation
 

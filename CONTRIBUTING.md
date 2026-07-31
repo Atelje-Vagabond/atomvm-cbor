@@ -47,7 +47,7 @@ The ESP-IDF helper uses digest-pinned public images and the exact AtomVM 0.6.6 s
 - OTP application: `avm_cbor`
 - Hex package: `atomvm_cbor`
 - Current version and tag: `0.2.0`
-- Historical `v0.1.0`: source/benchmark baseline only; never publish it to Hex
+- Public `v0.1.1`: source/benchmark baseline only; never publish it to Hex
 
 Release tags use the exact `VERSION` value and never add a leading `v`.
 

@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout exact source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.EXPECTED_SHA }}
           fetch-depth: 0
@@ -69,16 +69,16 @@ jobs:
         otp: ["25", "27"]
     steps:
       - name: Checkout exact source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.EXPECTED_SHA }}
       - name: Assert exact checkout
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
       - name: Install Erlang and Rebar3
-        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        uses: erlef/setup-beam@v1.24.1
         with:
           otp-version: ${{ matrix.otp }}
-          rebar3-version: "3.25.1"
+          rebar3-version: ${{ matrix.otp == '25' && '3.24.0' || '3.25.1' }}
       - name: Compile and test
         run: |
           set -euo pipefail
@@ -95,14 +95,14 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout exact source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.EXPECTED_SHA }}
           fetch-depth: 0
       - name: Assert exact checkout
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
       - name: Install Erlang and Rebar3
-        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        uses: erlef/setup-beam@v1.24.1
         with:
           otp-version: "27"
           rebar3-version: "3.25.1"
@@ -124,19 +124,19 @@ jobs:
           COVERAGE_DIFF_FILE=coverage/changed.diff bash scripts/coverage-gate.sh
 
   performance:
-    name: v0.1.0 performance gate
+    name: v0.1.1 performance gate
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 20
     steps:
       - name: Checkout exact source and historical tags
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.EXPECTED_SHA }}
           fetch-depth: 0
       - name: Assert exact checkout
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
       - name: Install Erlang
-        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        uses: erlef/setup-beam@v1.24.1
         with:
           otp-version: "29"
       - name: Prove fail-closed threshold behavior
@@ -155,13 +155,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout exact source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.EXPECTED_SHA }}
       - name: Assert exact checkout
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
       - name: Install Erlang
-        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        uses: erlef/setup-beam@v1.24.1
         with:
           otp-version: "25"
       - name: Download checksum-verified AtomVM
@@ -185,7 +185,7 @@ jobs:
         idf: ["v5.4.3", "v5.5.2"]
     steps:
       - name: Checkout exact source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.EXPECTED_SHA }}
       - name: Assert exact checkout
@@ -199,13 +199,13 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout exact source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ env.EXPECTED_SHA }}
       - name: Assert exact checkout
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
       - name: Install Erlang, Elixir, and Rebar3
-        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        uses: erlef/setup-beam@v1.24.1
         with:
           otp-version: "27"
           elixir-version: "1.18"
@@ -247,7 +247,7 @@ jobs:
           mkdir -p "${consumer}/src" "${consumer}/_checkouts"
           cp -a "${PACKAGE_DIR}" "${consumer}/_checkouts/avm_cbor"
           printf '{erl_opts, [debug_info]}.\n{deps, [{avm_cbor, "~> 0.2.0", {pkg, atomvm_cbor}}]}.\n' > "${consumer}/rebar.config"
-          printf '{application, rebar_consumer, [{vsn, "0.1.0"}, {modules, [rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/rebar_consumer.app.src"
+          printf '{application, rebar_consumer, [{vsn, "0.0.0"}, {modules, [rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/rebar_consumer.app.src"
           printf -- '-module(rebar_consumer).\n-export([run/0]).\nrun() -> avm_cbor:decode(<<1>>).\n' > "${consumer}/src/rebar_consumer.erl"
           (cd "${consumer}" && rebar3 compile)
       - name: Compile clean Mix consumer
@@ -256,7 +256,7 @@ jobs:
           consumer="$(mktemp -d)"
           mkdir -p "${consumer}/lib"
           cp -a "${PACKAGE_DIR}" "${consumer}/avm_cbor_package"
-          printf 'defmodule MixConsumer.MixProject do\n  use Mix.Project\n  def project, do: [app: :mix_consumer, version: "0.1.0", deps: [{:avm_cbor, path: "avm_cbor_package"}]]\n  def application, do: [extra_applications: [:avm_cbor]]\nend\n' > "${consumer}/mix.exs"
+          printf 'defmodule MixConsumer.MixProject do\n  use Mix.Project\n  def project, do: [app: :mix_consumer, version: "0.0.0", deps: [{:avm_cbor, path: "avm_cbor_package"}]]\n  def application, do: [extra_applications: [:avm_cbor]]\nend\n' > "${consumer}/mix.exs"
           printf 'defmodule MixConsumer do\n  def run, do: :avm_cbor.decode(<<1>>)\nend\n' > "${consumer}/lib/mix_consumer.ex"
           (cd "${consumer}" && mix deps.get && mix compile --warnings-as-errors)
 

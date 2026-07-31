@@ -29,12 +29,12 @@ erlc -Wall -I src -o "${fixed_dir}/ebin" \
     src/avm_cbor.erl src/avm_cbor_partial.erl bench/remediation_benchmark.erl
 
 erl -noshell -pa "${baseline_dir}/ebin" -eval \
-    "ok = remediation_benchmark:run(\"v0.1.0-source-baseline\", \"${baseline_commit}\", \"bench/results/v0.1.0.csv\"), halt()."
+    "ok = remediation_benchmark:run(\"v0.1.1-source-baseline\", \"${baseline_commit}\", \"bench/results/v0.1.1.csv\"), halt()."
 erl -noshell -pa "${fixed_dir}/ebin" -eval \
     "ok = remediation_benchmark:run(\"fixed\", \"${fixed_commit}\", \"bench/results/0.2.0.csv\"), halt()."
 erl -noshell -pa "${fixed_dir}/ebin" -eval \
     'ok = remediation_benchmark:compare(
-        "bench/results/v0.1.0.csv",
+        "bench/results/v0.1.1.csv",
         "bench/results/0.2.0.csv",
         "bench/results/0.2.0-comparison.json",
         "docs/benchmarks/0.2.0-local.md"

@@ -356,14 +356,14 @@ comparison_markdown(BaselineMeta, FixedMeta, Comparisons, NoiseTolerance, Gate) 
             proplists:get_value("samples", FixedMeta),
             proplists:get_value("warmup_iterations", FixedMeta)]),
         io_lib:format(
-            "- Regression gate: **~s**; every comparable median and p95 must stay within +~.2f% of v0.1.0. The tolerance covers scheduler and clock noise; any larger positive change exits nonzero.\n\n",
+            "- Regression gate: **~s**; every comparable median and p95 must stay within +~.2f% of v0.1.1. The tolerance covers scheduler and clock noise; any larger positive change exits nonzero.\n\n",
             [Gate, NoiseTolerance]
         ),
-        "| Workload | v0.1.0 median ns | Fixed median ns | Median change | v0.1.0 p95 ns | Fixed p95 ns | p95 change | Fixed MAD ns |\n",
+        "| Workload | v0.1.1 median ns | Fixed median ns | Median change | v0.1.1 p95 ns | Fixed p95 ns | p95 change | Fixed MAD ns |\n",
         "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
         Rows,
-        "\n`partial_decode_nested`, `deterministic_map_encode`, and `deterministic_map_decode` are N/A for v0.1.0 because that exact tag has neither the partial API nor the deterministic option. The fixed timings are retained so every required representative workload is measured.\n\n",
-        "The malformed workload expects v0.1.0's `truncated` result and the fixed implementation's earlier global-budget rejection. It therefore measures each version's correct failure path rather than forcing identical error semantics.\n\n",
+        "\n`partial_decode_nested`, `deterministic_map_encode`, and `deterministic_map_decode` are N/A for v0.1.1 because that exact tag has neither the partial API nor the deterministic option. The fixed timings are retained so every required representative workload is measured.\n\n",
+        "The malformed workload expects v0.1.1's `truncated` result and the fixed implementation's earlier global-budget rejection. It therefore measures each version's correct failure path rather than forcing identical error semantics.\n\n",
         "GC counters and heap deltas are recorded in the CSV and JSON artifacts. They are observational BEAM process/runtime counters, not exact allocation counts.\n"
     ].
 

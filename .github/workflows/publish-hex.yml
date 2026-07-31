@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Checkout selected tag
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@v7.0.1
         with:
           ref: 0.2.0
           fetch-depth: 0
@@ -38,7 +38,7 @@ jobs:
             --jq '[.check_runs[] | select(.name == "Exact-head release gate" and .conclusion == "success")] | length')"
           test "${gate_count}" -ge 1
       - name: Install Erlang, Elixir, and Rebar3
-        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        uses: erlef/setup-beam@v1.24.1
         with:
           otp-version: "27"
           elixir-version: "1.18"
@@ -87,12 +87,12 @@ jobs:
       HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
     steps:
       - name: Checkout selected tag
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@v7.0.1
         with:
           ref: 0.2.0
           fetch-depth: 0
       - name: Install Erlang and Rebar3
-        uses: erlef/setup-beam@0f75c29430f34bb5af4cce5e3b7f6a8860fca236
+        uses: erlef/setup-beam@v1.24.1
         with:
           otp-version: "27"
           elixir-version: "1.18"
@@ -151,7 +151,7 @@ jobs:
           consumer="$(mktemp -d)"
           mkdir -p "${consumer}/src"
           printf '{erl_opts, [debug_info]}.\n{deps, [{avm_cbor, "~> 0.2.0", {pkg, atomvm_cbor}}]}.\n' > "${consumer}/rebar.config"
-          printf '{application, published_rebar_consumer, [{vsn, "0.1.0"}, {modules, [published_rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/published_rebar_consumer.app.src"
+          printf '{application, published_rebar_consumer, [{vsn, "0.0.0"}, {modules, [published_rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/published_rebar_consumer.app.src"
           printf -- '-module(published_rebar_consumer).\n-export([run/0]).\nrun() -> avm_cbor:decode(<<1>>).\n' > "${consumer}/src/published_rebar_consumer.erl"
           (cd "${consumer}" && rebar3 compile)
       - name: Verify published Mix consumer
@@ -159,6 +159,6 @@ jobs:
           set -euo pipefail
           consumer="$(mktemp -d)"
           mkdir -p "${consumer}/lib"
-          printf 'defmodule PublishedMixConsumer.MixProject do\n  use Mix.Project\n  def project, do: [app: :published_mix_consumer, version: "0.1.0", deps: [{:avm_cbor, "~> 0.2.0", hex: :atomvm_cbor}]]\n  def application, do: [extra_applications: [:avm_cbor]]\nend\n' > "${consumer}/mix.exs"
+          printf 'defmodule PublishedMixConsumer.MixProject do\n  use Mix.Project\n  def project, do: [app: :published_mix_consumer, version: "0.0.0", deps: [{:avm_cbor, "~> 0.2.0", hex: :atomvm_cbor}]]\n  def application, do: [extra_applications: [:avm_cbor]]\nend\n' > "${consumer}/mix.exs"
           printf 'defmodule PublishedMixConsumer do\n  def run, do: :avm_cbor.decode(<<1>>)\nend\n' > "${consumer}/lib/published_mix_consumer.ex"
           (cd "${consumer}" && mix local.hex --force && mix deps.get && mix compile --warnings-as-errors)

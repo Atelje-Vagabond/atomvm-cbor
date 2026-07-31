@@ -12,4 +12,4 @@ The remediation benchmark compares representative decode, encode, sequence, malf
 
 Release notes may contain independently validated host and hardware summaries. These are historical measured context, not universal latency guarantees and not claims that the implementation is leak-free or secure against every possible workload.
 
-The public release gate validates the benchmark harness and the historical v0.1.0 source comparison where supported. The public `v0.1.1` tag contains byte-identical runtime source and is checksum-verified by the runner, so it is the reproducible public source reference. APIs absent from v0.1.0 are reported as `N/A` rather than inferred.
+The public release gate validates the benchmark harness and the public `v0.1.1` source comparison where supported. The tag is checksum-verified by the runner and is the reproducible public source reference. APIs absent from `v0.1.1` are reported as `N/A` rather than inferred.
