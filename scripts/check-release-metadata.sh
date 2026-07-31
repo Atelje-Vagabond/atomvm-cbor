@@ -150,6 +150,16 @@ if package.count("warning: documentation references file") != 2:
 publish_workflow = Path(".github/workflows/publish-hex.yml").read_text(encoding="utf-8")
 if publish_workflow.count("warning: documentation references file") != 2:
     raise SystemExit("publication preflight must reject broken HexDocs file references")
+for required in (
+    "actions: read",
+    'git merge-base --is-ancestor "${tag_commit}" refs/remotes/origin/main',
+    'actions/workflows/release-gate.yml/runs',
+    'head_branch == "\'"${RELEASE_VERSION}"\'"',
+    'head_sha == "\'"${tag_commit}"\'"',
+    "successful exact release-tag gate is missing",
+):
+    if required not in publish_workflow:
+        raise SystemExit(f"publication ancestry/tag-gate invariant is missing: {required}")
 
 print("Release workflow routing, order, and unchanged 5 percent threshold passed.")
 PY

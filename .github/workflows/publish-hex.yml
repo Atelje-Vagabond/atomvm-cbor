@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
   checks: read
 
@@ -34,6 +35,11 @@ jobs:
           tag_commit="$(git rev-parse "refs/tags/${RELEASE_VERSION}^{}")"
           test "$(git rev-parse HEAD)" = "${tag_commit}"
           test "$(python3 scripts/read-release-version.py)" = "${RELEASE_VERSION}"
+          git fetch --force origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${tag_commit}" refs/remotes/origin/main; then
+            echo "release tag commit is not reachable from origin/main: ${tag_commit}" >&2
+            exit 1
+          fi
           tag_count="$(git tag --points-at HEAD | awk -v version="${RELEASE_VERSION}" '$0 == version { count++ } END { print count + 0 }')"
           test "${tag_count}" -eq 1
           if git ls-remote --exit-code --tags origin "refs/tags/v${RELEASE_VERSION}" >/dev/null 2>&1; then
@@ -43,6 +49,15 @@ jobs:
           gate_count="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${tag_commit}/check-runs" \
             --jq '[.check_runs[] | select(.name == "Exact-head release gate" and .conclusion == "success")] | length')"
           test "${gate_count}" -ge 1
+          tag_gate_run_count="$(gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-gate.yml/runs" \
+            -f event=push -f status=success -f branch="${RELEASE_VERSION}" \
+            -f head_sha="${tag_commit}" \
+            --jq '[.workflow_runs[] | select(.head_sha == "'"${tag_commit}"'" and .head_branch == "'"${RELEASE_VERSION}"'" and .event == "push" and .conclusion == "success")] | length')"
+          if [ "${tag_gate_run_count}" -lt 1 ]; then
+            echo "successful exact release-tag gate is missing for ${RELEASE_VERSION}@${tag_commit}" >&2
+            exit 1
+          fi
       - name: Install Erlang, Elixir, and Rebar3
         uses: erlef/setup-beam@v1.24.1
         with:

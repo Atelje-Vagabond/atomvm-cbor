@@ -46,5 +46,13 @@ failure. Baseline capabilities are probed from the selected tag, so APIs absent
 from an old baseline are `N/A`; future baselines are not forced through a
 release-specific compile flag.
 
+Publication has a separate fail-closed lineage check. The release tag must
+match `VERSION`, resolve to the checked-out commit, be reachable from
+`origin/main`, and have a successful full tag-push release-gate run for the same
+tag name and commit SHA. The protected `hex-production` environment is reached
+only after those checks and the complete package/coverage/docs preflight pass.
+This prevents an unmerged but previously green PR commit, a moved tag, or an
+unrelated successful check from becoming a publishable release identity.
+
 See the [0.2.0 validation report](benchmarks/0.2.0.md) for the matched host,
 ESP32-S3, and RP2040 evidence.
