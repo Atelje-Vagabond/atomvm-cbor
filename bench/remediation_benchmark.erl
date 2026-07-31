@@ -1,6 +1,6 @@
 -module(remediation_benchmark).
 
--export([run/3, compare/4]).
+-export([run/3, aggregate/2, compare/4]).
 
 -define(SAMPLES, 31).
 -define(WARMUP_ITERATIONS, 1000).
@@ -60,6 +60,52 @@ run(Mode, Identity, OutputPath) ->
     ok = file:write_file(OutputPath, Data),
     print_results(Mode, Results),
     ok.
+
+aggregate(Paths, OutputPath) ->
+    Datasets = [read_results(Path) || Path <- Paths],
+    [{FirstMeta, FirstResults} | _] = Datasets,
+    Names = [Name || {Name, _} <- FirstResults],
+    Results = [
+        {Name, aggregate_result([
+            proplists:get_value(Name, DatasetResults)
+            || {_Meta, DatasetResults} <- Datasets
+        ])}
+        || Name <- Names
+    ],
+    Metadata = [{"aggregate_runs", integer_to_list(length(Paths))} | FirstMeta],
+    Data = [
+        "kind,name,available,samples,iterations,median_ns,p95_ns,mad_ns,min_ns,max_ns,gc_count,gc_reclaimed_words,heap_delta_words\n",
+        [io_lib:format("META,~s,~s~n", [Key, Value]) || {Key, Value} <- Metadata],
+        [result_csv({Name, Available, Samples, Iterations, Median, P95, Mad,
+                     Min, Max, GcCount, GcWords, HeapDelta})
+         || {Name, {Available, Samples, Iterations, Median, P95, Mad,
+                    Min, Max, GcCount, GcWords, HeapDelta}} <- Results]
+    ],
+    file:write_file(OutputPath, Data).
+
+aggregate_result(Results) ->
+    case [Result || Result = {true, _, _, _, _, _, _, _, _, _, _} <- Results] of
+        [] ->
+            {false, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+        Available ->
+            Values = [tuple_to_list(Result) || Result <- Available],
+            [AvailabilityColumn | NumericColumns] = transpose(Values),
+            true = lists:all(fun(Value) -> Value =:= true end, AvailabilityColumn),
+            list_to_tuple([true | [median(Values0) || Values0 <- NumericColumns]])
+    end.
+
+transpose([First | Rest]) ->
+    [[Value | Values] || {Value, Values} <- lists:zip(First, transpose_rows(Rest, length(First)))].
+
+transpose_rows([], Count) ->
+    lists:duplicate(Count, []);
+transpose_rows([Row | Rest], Count) ->
+    [ [Value | Values]
+      || {Value, Values} <- lists:zip(Row, transpose_rows(Rest, Count)) ].
+
+median(Values) ->
+    Sorted = lists:sort(Values),
+    lists:nth((length(Sorted) + 1) div 2, Sorted).
 
 workloads() ->
     [

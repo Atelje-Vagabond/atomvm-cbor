@@ -55,7 +55,7 @@ jobs:
           url="https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
           curl -fsSL "${url}" -o /tmp/gitleaks.tar.gz
           echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum --check
-          mkdir /tmp/gitleaks
+          mkdir -p /tmp/gitleaks
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp/gitleaks
           /tmp/gitleaks/gitleaks detect --source . --no-git --redact --verbose
 
@@ -144,6 +144,7 @@ jobs:
       - name: Compare exact historical baseline
         env:
           BENCHMARK_NOISE_TOLERANCE_PERCENT: "5"
+          BENCHMARK_RUNS: "5"
         run: |
           set -euo pipefail
           bash scripts/benchmark-remediation.sh 2>&1 | tee /tmp/performance-gate.log
