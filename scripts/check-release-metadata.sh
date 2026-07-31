@@ -14,6 +14,12 @@ grep -Fq 'https://github.com/Atelje-Vagabond/atomvm-cbor' src/avm_cbor.app.src
 grep -Fq '{prefix_ref_vsn_with_v, false}' rebar.config
 grep -Fq "# atomvm-cbor ${version}" "${release_notes}"
 grep -Fq "## ${version}" CHANGELOG.md
+grep -Fq "](../../blob/${version}/docs/benchmarks/${version}.md)" "${release_notes}"
+
+if grep -Fq '](../../docs/' "${release_notes}"; then
+    echo 'FAIL: release-note repository links must include the immutable tag path.' >&2
+    exit 1
+fi
 
 if grep -RInF "v${version}" \
     README.md CHANGELOG.md VERSION src docs scripts .github \
