@@ -1,7 +1,11 @@
 -module(avm_cbor_smoke).
--export([run/0]).
+-export([run/0, run_coverage/0]).
 
 run() ->
+    run_coverage(),
+    halt(0).
+
+run_coverage() ->
     io:format("~n=== avm_cbor smoke tests ===~n~n", []),
     tests([
         {decode_unsigned_integers, fun test_decode_unsigned_integers/0},
@@ -16,6 +20,7 @@ run() ->
         {decode_rest_bytes, fun test_decode_rest_bytes/0},
         {decode_max_depth, fun test_decode_max_depth/0},
         {decode_max_items, fun test_decode_max_items/0},
+        {decode_global_budgets, fun test_decode_global_budgets/0},
         {decode_max_bytes, fun test_decode_max_bytes/0},
         {decode_max_string_bytes, fun test_decode_max_string_bytes/0},
         {decode_errors, fun test_decode_errors/0},
@@ -27,16 +32,20 @@ run() ->
         {encode_text_strings, fun test_encode_text_strings/0},
         {encode_arrays, fun test_encode_arrays/0},
         {encode_maps, fun test_encode_maps/0},
+        {encode_deterministic_maps, fun test_encode_deterministic_maps/0},
+        {encode_deterministic_nested_maps, fun test_encode_deterministic_nested_maps/0},
         {encode_simple_values, fun test_encode_simple_values/0},
         {encode_roundtrip, fun test_encode_roundtrip/0},
         {helpers, fun test_helpers/0},
         {option_validation, fun test_option_validation/0},
+        {preferred_serialization, fun preferred_serialization/0},
         {tags, fun test_tags/0},
         {encode_limits, fun test_encode_limits/0},
+        {encode_preferred_floats, fun test_encode_preferred_floats/0},
         {utf8_validation, fun test_utf8_validation/0}
     ]),
     io:format("~n=== all smoke tests passed ===~n"),
-    halt(0).
+    ok.
 
 tests([{Name, F} | Rest]) ->
     io:format("  ~s ... ", [Name]),
@@ -90,6 +99,12 @@ decode_ok_with_opts(Bin, Opts) ->
 
 encode_ok(Val) ->
     case avm_cbor:encode(Val) of
+        {ok, Bin} -> Bin;
+        {error, Reason} -> erlang:error({encode_error, Reason})
+    end.
+
+encode_ok_with_opts(Val, Opts) ->
+    case avm_cbor:encode(Val, Opts) of
         {ok, Bin} -> Bin;
         {error, Reason} -> erlang:error({encode_error, Reason})
     end.
@@ -223,11 +238,17 @@ test_decode_floats() ->
     %% Half-precision float: 0.000000059604645 (min positive subnormal)
     assert(5.960464477539063e-8, decode_ok(<<16#F9, 16#00, 16#01>>)),
     %% Half-precision float: +inf returns controlled error
-    {error, {unsupported_simple_value, infinity}} = avm_cbor:decode(<<16#F9, 16#7C, 16#00>>),
+    {error, {unsupported_simple_value, invalid_float}} = avm_cbor:decode(<<16#F9, 16#7C, 16#00>>),
     %% Half-precision float: -inf returns controlled error
-    {error, {unsupported_simple_value, infinity}} = avm_cbor:decode(<<16#F9, 16#FC, 16#00>>),
+    {error, {unsupported_simple_value, invalid_float}} = avm_cbor:decode(<<16#F9, 16#FC, 16#00>>),
     %% Half-precision float: NaN returns controlled error
-    {error, {unsupported_simple_value, nan}} = avm_cbor:decode(<<16#F9, 16#7E, 16#00>>),
+    {error, {unsupported_simple_value, invalid_float}} = avm_cbor:decode(<<16#F9, 16#7E, 16#00>>),
+    %% Single-precision NaN returns a controlled error on runtimes that cannot represent it
+    {error, {unsupported_simple_value, invalid_float}} =
+        avm_cbor:decode(<<16#FA, 16#7F, 16#C0, 16#00, 16#00>>),
+    %% Double-precision NaN returns a controlled error on runtimes that cannot represent it
+    {error, {unsupported_simple_value, invalid_float}} =
+        avm_cbor:decode(<<16#FB, 16#7F, 16#F8, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00>>),
     %% Half-precision float with allow_floats=false
     {error, floats_not_allowed} = avm_cbor:decode(<<16#F9, 16#3C, 16#00>>, [{allow_floats, false}]),
     %% Partial options: floats still work by default
@@ -263,12 +284,49 @@ test_decode_max_depth() ->
 %%--------------------------------------------------------------------
 
 test_decode_max_items() ->
-    %% Array with 3 items with max_items=2 should fail
-    decode_error_with_opts(<<16#83, 16#01, 16#02, 16#03>>, [{max_items, 2}]),
-    %% Array with 3 items with max_items=3 should succeed
-    decode_ok(<<16#83, 16#01, 16#02, 16#03>>),
-    %% Map with 3 pairs with max_items=2 should fail
-    decode_error_with_opts(<<16#A3, 16#01, 16#0A, 16#02, 16#14, 16#03, 16#1E>>, [{max_items, 2}]),
+    %% The container and every child value consume one global node.
+    {error, {max_items_exceeded, 3}} =
+        avm_cbor:decode(<<16#83, 1, 2, 3>>, [{max_items, 3}]),
+    {ok, [1, 2, 3], <<>>} =
+        avm_cbor:decode(<<16#83, 1, 2, 3>>, [{max_items, 4}]),
+    %% A map consumes one node plus one node for every key and value.
+    {error, {max_items_exceeded, 6}} =
+        avm_cbor:decode(<<16#A3, 1, 10, 2, 20, 3, 21>>, [{max_items, 6}]),
+    {ok, {map, [{1, 10}, {2, 20}, {3, 21}]}, <<>>} =
+        avm_cbor:decode(<<16#A3, 1, 10, 2, 20, 3, 21>>, [{max_items, 7}]),
+    ok.
+
+test_decode_global_budgets() ->
+    %% [[1,2],[3,4]] contains seven charged nodes.  Entering the second
+    %% child container must not reset the operation budget.
+    Nested = <<16#82, 16#82, 1, 2, 16#82, 3, 4>>,
+    {error, {max_items_exceeded, 6}} =
+        avm_cbor:decode(Nested, [{max_items, 6}]),
+    {ok, [[1, 2], [3, 4]], <<>>} =
+        avm_cbor:decode(Nested, [{max_items, 7}]),
+    %% Tags and tagged values are charged independently.
+    {error, {max_items_exceeded, 1}} =
+        avm_cbor:decode(<<16#C1, 1>>, [{max_items, 1}]),
+    {ok, {tag, 1, 1}, <<>>} =
+        avm_cbor:decode(<<16#C1, 1>>, [{max_items, 2}]),
+    %% Definite strings share a cumulative byte budget across one operation.
+    Strings = <<16#83, 16#41, $a, 16#41, $b, 16#41, $c>>,
+    {error, {max_total_string_bytes_exceeded, 2}} =
+        avm_cbor:decode(
+            Strings,
+            [{max_items, 4}, {max_string_bytes, 1}, {max_total_string_bytes, 2}]
+        ),
+    {ok, [<<"a">>, <<"b">>, <<"c">>], <<>>} =
+        avm_cbor:decode(
+            Strings,
+            [{max_items, 4}, {max_string_bytes, 1}, {max_total_string_bytes, 3}]
+        ),
+    %% Sequence items consume the same state rather than receiving fresh limits.
+    {error, {max_total_string_bytes_exceeded, 2}} =
+        avm_cbor:decode_all(
+            <<16#41, $a, 16#41, $b, 16#41, $c>>,
+            [{max_items, 3}, {max_total_string_bytes, 2}]
+        ),
     ok.
 
 %%--------------------------------------------------------------------
@@ -279,8 +337,12 @@ test_decode_max_bytes() ->
     %% 100-byte payload with max_bytes=50 should fail
     Big = <<16#58, 16#19, (<<0:200/unit:8>>)/binary>>,
     decode_error_with_opts(Big, [{max_bytes, 10}]),
-    %% Small payload with max_bytes=0 (unlimited) should work
-    decode_ok(<<16#01>>),
+    %% Untrusted callers cannot disable the byte budget.
+    {error, {invalid_option, {max_bytes, 0}}} =
+        avm_cbor:decode(<<16#01>>, [{max_bytes, 0}]),
+    %% The trusted default path is finite too.
+    {error, {max_bytes_exceeded, 1048576}} =
+        avm_cbor:decode(binary:copy(<<0>>, 1048577)),
     ok.
 
 %%--------------------------------------------------------------------
@@ -393,6 +455,33 @@ test_encode_maps() ->
     ok.
 
 %%--------------------------------------------------------------------
+%% Encode maps deterministically
+%%--------------------------------------------------------------------
+
+test_encode_deterministic_maps() ->
+    Map = {map, [
+        {{text, <<"b">>}, 2},
+        {<<16#61>>, 3},
+        {1, {text, <<"one">>}}
+    ]},
+    assert(<<16#A3, 16#61, 16#62, 16#02, 16#41, 16#61, 16#03, 16#01, 16#63, 16#6F, 16#6E, 16#65>>,
+           encode_ok_with_opts(Map, [{deterministic, false}])),
+    assert(<<16#A3, 16#01, 16#63, 16#6F, 16#6E, 16#65, 16#41, 16#61, 16#03, 16#61, 16#62, 16#02>>,
+           encode_ok_with_opts(Map, [{deterministic, true}])),
+    ok.
+
+test_encode_deterministic_nested_maps() ->
+    Map = {map, [
+        {{map, [{2, 3}, {1, 4}]}, 1},
+        {{map, [{1, 2}]}, 2}
+    ]},
+    assert(<<16#A2, 16#A2, 16#02, 16#03, 16#01, 16#04, 16#01, 16#A1, 16#01, 16#02, 16#02>>,
+           encode_ok_with_opts(Map, [{deterministic, false}])),
+    assert(<<16#A2, 16#A1, 16#01, 16#02, 16#02, 16#A2, 16#01, 16#04, 16#02, 16#03, 16#01>>,
+           encode_ok_with_opts(Map, [{deterministic, true}])),
+    ok.
+
+%%--------------------------------------------------------------------
 %% Encode booleans/null/undefined
 %%--------------------------------------------------------------------
 
@@ -466,14 +555,62 @@ test_option_validation() ->
     {error, {invalid_option, _}} = avm_cbor:decode(<<16#01>>, [bad_option]),
     {error, {invalid_option, _}} = avm_cbor:decode(<<16#01>>, [{max_depth, bad}]),
     {error, {invalid_option, _}} = avm_cbor:decode(<<16#01>>, [{max_depth, -1}]),
+    {error, {invalid_option, _}} = avm_cbor:decode(<<16#01>>, [{max_depth, 0}]),
+    {error, {invalid_option, _}} = avm_cbor:decode(<<16#01>>, [{max_items, 0}]),
+    {error, {invalid_option, {max_string_bytes, 0}}} =
+        avm_cbor:decode(<<16#40>>, [{max_string_bytes, 0}]),
+    {error, {invalid_option, {max_total_string_bytes, 0}}} =
+        avm_cbor:decode(<<16#40>>, [{max_total_string_bytes, 0}]),
     {error, {invalid_option, _}} = avm_cbor:encode(1, [bad_option]),
     {error, {invalid_option, _}} = avm_cbor:encode(1, [{allow_floats, perhaps}]),
+    {error, {invalid_option, _}} = avm_cbor:encode(1, [{deterministic, perhaps}]),
+    %% Non-list options return an error instead of crashing
+    {error, invalid_options_list} = avm_cbor:decode(<<16#01>>, invalid_options),
+    {error, invalid_options_list} = avm_cbor:decode_all(<<16#01>>, invalid_options),
+    {error, invalid_options_list} = avm_cbor:decode_sequence(<<16#01>>, invalid_options),
+    {error, invalid_options_list} = avm_cbor:encode(1, invalid_options),
     %% Valid options with decode/2
     {ok, 1, <<>>} = avm_cbor:decode(<<16#01>>, [{max_depth, 8}]),
     {ok, 1, <<>>} = avm_cbor:decode(<<16#01>>, []),
     %% Valid options with encode/2
     {ok, _} = avm_cbor:encode(1, [{max_items, 1}]),
     {ok, _} = avm_cbor:encode(1, []),
+    {ok, _} = avm_cbor:encode(1, [{deterministic, true}]),
+    %% Normalized defaults must remain behaviorally identical to /2 with [].
+    Sample = <<16#A2, 1, 2, 3, 16#82, 4, 5>>,
+    assert(avm_cbor:decode(Sample), avm_cbor:decode(Sample, [])),
+    assert(avm_cbor:decode_all(<<1, 2, 3>>), avm_cbor:decode_all(<<1, 2, 3>>, [])),
+    assert(avm_cbor:decode_sequence(<<1, 16#82, 2>>),
+           avm_cbor:decode_sequence(<<1, 16#82, 2>>, [])),
+    Value = {map, [{24, 1}, {1, [2, 3]}]},
+    assert(avm_cbor:encode(Value), avm_cbor:encode(Value, [])),
+    %% Preserve merge_opts/2 semantics: the last duplicate option wins.
+    {ok, {tag, 1, 1}, <<>>} =
+        avm_cbor:decode(<<16#C1, 1>>, [{allow_tags, false}, {allow_tags, true}]),
+    {error, {unsupported_tag, 1}} =
+        avm_cbor:decode(<<16#C1, 1>>, [{allow_tags, true}, {allow_tags, false}]),
+    {ok, [1, 2], <<>>} =
+        avm_cbor:decode(<<16#82, 1, 2>>, [{max_items, 1}, {max_items, 3}]),
+    {error, {max_items_exceeded, 1}} =
+        avm_cbor:decode(<<16#82, 1, 2>>, [{max_items, 3}, {max_items, 1}]),
+    {ok, 23, <<>>} =
+        avm_cbor:decode(<<16#18, 23>>, [{preferred, true}, {preferred, false}]),
+    {error, {non_preferred_argument, 23}} =
+        avm_cbor:decode(<<16#18, 23>>, [{preferred, false}, {preferred, true}]),
+    UnsortedMap = {map, [{24, 1}, {1, 2}]},
+    {ok, OriginalOrder} = avm_cbor:encode(UnsortedMap, [{deterministic, false}]),
+    {ok, SortedOrder} = avm_cbor:encode(UnsortedMap, [{deterministic, true}]),
+    {ok, OriginalOrder} =
+        avm_cbor:encode(UnsortedMap, [{deterministic, true}, {deterministic, false}]),
+    {ok, SortedOrder} =
+        avm_cbor:encode(UnsortedMap, [{deterministic, false}, {deterministic, true}]),
+    %% Improper lists and partial-only options retain their exact error class.
+    {error, invalid_options_list} =
+        avm_cbor:decode(<<1>>, [{max_depth, 8} | invalid_tail]),
+    {error, invalid_options_list} =
+        avm_cbor:encode(1, [{max_depth, 8} | invalid_tail]),
+    {error, {invalid_option, {max_string_size, 8}}} =
+        avm_cbor:decode(<<1>>, [{max_string_size, 8}]),
     ok.
 
 %%--------------------------------------------------------------------
@@ -501,6 +638,15 @@ test_tags() ->
            decode_ok(encode_ok({tag, 100, {text, <<"hello">>}}))),
     %% Tag encode with allow_tags=false
     {error, tags_not_allowed} = avm_cbor:encode({tag, 1, 2}, [{allow_tags, false}]),
+    %% Nested tag depth enforcement: 10 nested tags with max_depth=5 must fail
+    NestedTags10 = lists:foldl(fun(_, Acc) -> <<16#C1, Acc/binary>> end, <<16#01>>, lists:seq(1, 10)),
+    {error, {max_depth_exceeded, 5}} = avm_cbor:decode(NestedTags10, [{max_depth, 5}]),
+    %% Nested tag depth enforcement: 5 nested tags with max_depth=5 should succeed
+    NestedTags5 = lists:foldl(fun(_, Acc) -> <<16#C1, Acc/binary>> end, <<16#01>>, lists:seq(1, 5)),
+    {ok, _, <<>>} = avm_cbor:decode(NestedTags5, [{max_depth, 5}]),
+    %% Nested tag depth enforcement: 50 nested tags with max_depth=5 must fail (DoS vector)
+    NestedTags50 = lists:foldl(fun(_, Acc) -> <<16#C1, Acc/binary>> end, <<16#01>>, lists:seq(1, 50)),
+    {error, {max_depth_exceeded, 5}} = avm_cbor:decode(NestedTags50, [{max_depth, 5}]),
     ok.
 
 %%--------------------------------------------------------------------
@@ -534,6 +680,13 @@ test_encode_limits() ->
     %% max_bytes enforcement
     {error, {max_bytes_exceeded, 1}} = avm_cbor:encode(1000, [{max_bytes, 1}]),
     {ok, _} = avm_cbor:encode(1000, [{max_bytes, 3}]),
+    {error, {invalid_option, {max_bytes, 0}}} = avm_cbor:encode(1, [{max_bytes, 0}]),
+    %% Composite allocations fail at the next segment that would exceed the budget.
+    {error, {max_bytes_exceeded, 4}} =
+        avm_cbor:encode(<<1, 2, 3, 4>>, [{max_bytes, 4}]),
+    {error, {max_bytes_exceeded, 2}} = avm_cbor:encode([1, 2], [{max_bytes, 2}]),
+    {error, {max_bytes_exceeded, 2}} =
+        avm_cbor:encode({map, [{1, 2}]}, [{max_bytes, 2}, {deterministic, true}]),
     %% integer out of range
     {error, {integer_out_of_range, _}} = avm_cbor:encode(16#10000000000000000, []),
     {error, {integer_out_of_range, _}} = avm_cbor:encode(-18446744073709551617, []),
@@ -559,6 +712,15 @@ test_decode_indefinite() ->
     %% Indefinite-length text string
     assert({text, <<"hello">>},
            decode_ok(<<16#7F, 16#63, 16#68, 16#65, 16#6C, 16#62, 16#6C, 16#6F, 16#FF>>)),
+    %% Indefinite text string chunks must be valid UTF-8 individually
+    {error, invalid_utf8} = avm_cbor:decode(<<16#7F, 16#61, 16#FF, 16#FF>>),
+    %% Empty chunks consume the shared max_items work budget.
+    {error, {max_items_exceeded, 2}} =
+        avm_cbor:decode(<<16#5F, 16#40, 16#40, 16#40, 16#FF>>, [{max_items, 2}]),
+    {error, {max_items_exceeded, 2}} =
+        avm_cbor:decode(<<16#7F, 16#60, 16#60, 16#60, 16#FF>>, [{max_items, 2}]),
+    {ok, <<>>, <<>>} =
+        avm_cbor:decode(<<16#5F, 16#40, 16#40, 16#FF>>, [{max_items, 3}]),
     %% Indefinite-length array
     assert([1, 2, 3],
            decode_ok(<<16#9F, 16#01, 16#02, 16#03, 16#FF>>)),
@@ -605,14 +767,60 @@ test_decode_sequence() ->
     {error, {invalid_option, _}} = avm_cbor:decode_all(<<16#01>>, [bad_option]),
     %% max_bytes enforced
     {error, {max_bytes_exceeded, 1}} = avm_cbor:decode_all(<<16#01, 16#02>>, [{max_bytes, 1}]),
+    %% The shared max_items budget caps top-level sequence expansion.
+    {error, {max_items_exceeded, 2}} =
+        avm_cbor:decode_all(<<16#01, 16#02, 16#03>>, [{max_items, 2}]),
     %% decode_sequence returns {ok, Values, Rest} with trailing truncated data
     {ok, [], <<>>} = avm_cbor:decode_sequence(<<>>),
     {ok, [1], <<>>} = avm_cbor:decode_sequence(<<16#01>>),
     {ok, [1, 2], <<>>} = avm_cbor:decode_sequence(<<16#01, 16#02>>),
     {ok, [1, 2], <<16#82, 3>>} = avm_cbor:decode_sequence(<<16#01, 16#02, 16#82, 3>>),
+    {error, {max_items_exceeded, 2}} =
+        avm_cbor:decode_sequence(<<16#01, 16#02, 16#03>>, [{max_items, 2}]),
     {error, unexpected_break} = avm_cbor:decode_sequence(<<16#01, 16#FF>>),
     %% decode_sequence with options
     {error, {invalid_option, _}} = avm_cbor:decode_sequence(<<16#01>>, [bad_option]),
+    ok.
+
+%%--------------------------------------------------------------------
+%% Preferred float encoding
+%%--------------------------------------------------------------------
+
+test_encode_preferred_floats() ->
+    %% Half-precision: 1.0 -> F9 3C00
+    assert(<<16#F9, 16#3C, 16#00>>, encode_ok_with_opts(1.0, [{preferred, true}])),
+    %% Half-precision: 0.0 -> F9 0000
+    assert(<<16#F9, 16#00, 16#00>>, encode_ok_with_opts(0.0, [{preferred, true}])),
+    %% Half-precision: -0.0 -> F9 8000
+    assert(<<16#F9, 16#80, 16#00>>, encode_ok_with_opts(-0.0, [{preferred, true}])),
+    %% Half-precision: 1.5 -> F9 3E00
+    assert(<<16#F9, 16#3E, 16#00>>, encode_ok_with_opts(1.5, [{preferred, true}])),
+    %% Half-precision: 65504.0 -> F9 7BFF
+    assert(<<16#F9, 16#7B, 16#FF>>, encode_ok_with_opts(65504.0, [{preferred, true}])),
+    %% Single-precision: 16777216.0 (2^24, outside half range) -> FA 4B80 0000
+    assert(<<16#FA, 16#4B, 16#80, 16#00, 16#00>>,
+           encode_ok_with_opts(16777216.0, [{preferred, true}])),
+    %% Single-precision roundtrip
+    assert(16777216.0, decode_ok(encode_ok_with_opts(16777216.0, [{preferred, true}]))),
+    %% Double-precision only: 1.1 -> FB...
+    {ok, Bin11, <<>>} = avm_cbor:decode(encode_ok_with_opts(1.1, [{preferred, true}])),
+    assert(1.1, Bin11),
+    <<H11:8, _/binary>> = encode_ok_with_opts(1.1, [{preferred, true}]),
+    assert(16#FB, H11),
+    %% Default (non-preferred) still uses double
+    assert(<<16#FB, 16#3F, 16#F0, 16#00, 16#00, 16#00, 16#00, 16#00, 16#00>>,
+           encode_ok(1.0)),
+    %% Deterministic mode also prefers shortest float
+    assert(<<16#F9, 16#3C, 16#00>>, encode_ok_with_opts(1.0, [{deterministic, true}])),
+    %% Roundtrip: encode preferred, decode back
+    assert(1.0, decode_ok(encode_ok_with_opts(1.0, [{preferred, true}]))),
+    assert(65504.0, decode_ok(encode_ok_with_opts(65504.0, [{preferred, true}]))),
+    %% Half-precision minimum normal: 2^-14 = 0.00006103515625
+    Small = math:pow(2, -14),
+    assert(<<16#F9, 16#04, 16#00>>, encode_ok_with_opts(Small, [{preferred, true}])),
+    assert(Small, decode_ok(encode_ok_with_opts(Small, [{preferred, true}]))),
+    %% Negative half-precision value
+    assert(<<16#F9, 16#BC, 16#00>>, encode_ok_with_opts(-1.0, [{preferred, true}])),
     ok.
 
 %%--------------------------------------------------------------------
@@ -671,4 +879,16 @@ test_helpers() ->
     assert({ok, true}, avm_cbor:as_bool(true)),
     assert({ok, false}, avm_cbor:as_bool(false)),
     assert({error, bad_type}, avm_cbor:as_bool(null)),
+    ok.
+preferred_serialization() ->
+    assert({ok, 23, <<>>}, avm_cbor:decode(<<23>>, [{preferred, true}])),
+    assert({error, {non_preferred_argument, 23}}, avm_cbor:decode(<<16#18, 23>>, [{preferred, true}])),
+    assert({error, {non_preferred_argument, 255}}, avm_cbor:decode(<<16#19, 0, 255>>, [{preferred, true}])),
+    assert({error, {non_preferred_argument, 65535}}, avm_cbor:decode(<<16#1A, 0, 0, 255, 255>>, [{preferred, true}])),
+    assert({error, {non_preferred_argument, 16#FFFFFFFF}}, avm_cbor:decode(<<16#1B, 0, 0, 0, 0, 255, 255, 255, 255>>, [{preferred, true}])),
+    assert({ok, 23, <<>>}, avm_cbor:decode(<<16#18, 23>>, [{preferred, false}])),
+    assert({error, {non_preferred_simple, 16}}, avm_cbor:decode(<<16#F8, 16>>, [{preferred, true}])),
+    assert({ok, 0.0, <<>>}, avm_cbor:decode(<<16#F9, 0, 0>>, [{preferred, true}])),
+    assert({ok, {text, <<"a">>}, <<>>}, avm_cbor:decode(<<16#78, 1, "a">>, [{preferred, false}])),
+    assert({error, {non_preferred_argument, 1}}, avm_cbor:decode(<<16#78, 1, "a">>, [{preferred, true}])),
     ok.

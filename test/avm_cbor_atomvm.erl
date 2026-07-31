@@ -91,6 +91,14 @@ run_tests() ->
     test("decode half 65504",        avm_cbor:decode(<<16#F9, 16#7B, 16#FF>>),  {ok, 65504.0, <<>>}),
     test("decode half subnormal",    avm_cbor:decode(<<16#F9, 16#00, 16#01>>),  {ok, 5.960464477539063e-8, <<>>}),
     test("decode half nofloats",     avm_cbor:decode(<<16#F9, 16#3C, 16#00>>, [{allow_floats, false}]), {error, floats_not_allowed}),
+    test("encode min half subnormal", avm_cbor:encode(5.960464477539063e-8, [{preferred, true}]), {ok, <<16#F9, 16#00, 16#01>>}),
+    test("preferred rejects f32 half", avm_cbor:decode(<<16#FA, 16#3F, 16#80, 0, 0>>, [{preferred, true}]), {error, {non_preferred_float, half}}),
+    test("preferred rejects f64 half", avm_cbor:decode(<<16#FB, 16#3F, 16#F0, 0, 0, 0, 0, 0, 0>>, [{preferred, true}]), {error, {non_preferred_float, half}}),
+    test("deterministic rejects noncanonical nan", avm_cbor:decode(<<16#F9, 16#7E, 16#01>>, [{deterministic, true}]), {error, {non_deterministic_nan, 16#7E00}}),
+    test("deterministic sorted map", avm_cbor:decode(<<16#A2, 1, 0, 2, 0>>, [{deterministic, true}]), {ok, {map, [{1, 0}, {2, 0}]}, <<>>}),
+    test("deterministic unsorted map", avm_cbor:decode(<<16#A2, 2, 0, 1, 0>>, [{deterministic, true}]), {error, non_deterministic_map_order}),
+    test("deterministic duplicate map key", avm_cbor:decode(<<16#A2, 1, 0, 1, 1>>, [{deterministic, true}]), {error, duplicate_map_key}),
+    test("deterministic rejects indef", avm_cbor:decode(<<16#9F, 1, 16#FF>>, [{deterministic, true}]), {error, non_deterministic_indefinite}),
     %% Indefinite-length
     test("decode indef bstr",        avm_cbor:decode(<<16#5F, 16#41, 16#01, 16#41, 16#02, 16#FF>>), {ok, <<16#01, 16#02>>, <<>>}),
     test("decode indef empty arr",   avm_cbor:decode(<<16#9F, 16#FF>>),          {ok, [], <<>>}),
@@ -98,12 +106,23 @@ run_tests() ->
     test("decode indef empty map",   avm_cbor:decode(<<16#BF, 16#FF>>),          {ok, {map, []}, <<>>}),
     test("decode indef map 1:2",     avm_cbor:decode(<<16#BF, 16#01, 16#02, 16#FF>>), {ok, {map, [{1, 2}]}, <<>>}),
     test("decode indef disallowed",  avm_cbor:decode(<<16#9F, 16#01, 16#FF>>, [{allow_indefinite, false}]), {error, indefinite_length_unsupported}),
+    test("decode indef bstr chunk cap", avm_cbor:decode(<<16#5F, 16#40, 16#40, 16#40, 16#FF>>, [{max_items, 2}]), {error, {max_items_exceeded, 2}}),
+    test("decode indef tstr chunk cap", avm_cbor:decode(<<16#7F, 16#60, 16#60, 16#60, 16#FF>>, [{max_items, 2}]), {error, {max_items_exceeded, 2}}),
     %% CBOR sequence
     test("decode all empty",         avm_cbor:decode_all(<<>>),                 {ok, []}),
     test("decode all three",         avm_cbor:decode_all(<<16#01, 16#02, 16#03>>), {ok, [1, 2, 3]}),
+    test("decode all item cap",      avm_cbor:decode_all(<<16#01, 16#02, 16#03>>, [{max_items, 2}]), {error, {max_items_exceeded, 2}}),
     test("decode seq empty",         avm_cbor:decode_sequence(<<>>),            {ok, [], <<>>}),
     test("decode seq one",           avm_cbor:decode_sequence(<<16#01>>),       {ok, [1], <<>>}),
     test("decode seq trailing",      avm_cbor:decode_sequence(<<1, 2, 16#82, 3>>), {ok, [1, 2], <<16#82, 3>>}),
+    test("decode seq item cap",      avm_cbor:decode_sequence(<<1, 2, 3>>, [{max_items, 2}]), {error, {max_items_exceeded, 2}}),
+    test("decode global nested cap", avm_cbor:decode(<<16#82, 16#82, 1, 2, 16#82, 3, 4>>, [{max_items, 6}]), {error, {max_items_exceeded, 6}}),
+    test("decode global nested exact", avm_cbor:decode(<<16#82, 16#82, 1, 2, 16#82, 3, 4>>, [{max_items, 7}]), {ok, [[1, 2], [3, 4]], <<>>}),
+    test("decode fixed-cost mixed fallback", avm_cbor:decode(<<16#83, 0, 16#18, 24, 16#20>>), {ok, [0, 24, -1], <<>>}),
+    test("decode fixed-cost exact cap", avm_cbor:decode(<<16#83, 0, 1, 2>>, [{max_items, 4}]), {ok, [0, 1, 2], <<>>}),
+    test("decode fixed-cost over cap", avm_cbor:decode(<<16#83, 0, 1, 2>>, [{max_items, 3}]), {error, {max_items_exceeded, 3}}),
+    test("decode fixed-cost nested cap", avm_cbor:decode(<<16#82, 16#81, 0, 0>>, [{max_items, 3}]), {error, {max_items_exceeded, 3}}),
+    test("decode cumulative strings", avm_cbor:decode(<<16#83, 16#41, $a, 16#41, $b, 16#41, $c>>, [{max_items, 4}, {max_total_string_bytes, 2}]), {error, {max_total_string_bytes_exceeded, 2}}),
     %% UTF-8 validation
     test("utf8 valid ascii",         avm_cbor:decode(<<16#61, 16#61>>),          {ok, {text, <<"a">>}, <<>>}),
     test("utf8 valid 2byte",         avm_cbor:decode(<<16#62, 16#C2, 16#A9>>),   {ok, {text, <<16#C2, 16#A9>>}, <<>>}),
@@ -116,7 +135,112 @@ run_tests() ->
     test("encode utf8 invalid",      avm_cbor:encode({text, <<16#FF>>}),         {error, invalid_utf8}),
     test("encode utf8 overlong",     avm_cbor:encode({text, <<16#C0, 16#80>>}),  {error, invalid_utf8}),
     test("encode utf8 surrogate",    avm_cbor:encode({text, <<16#ED, 16#A0, 16#80>>}), {error, invalid_utf8}),
+    %% Normalized option state and last-duplicate-wins behavior
+    test("opts default decode",       avm_cbor:decode(<<16#82, 1, 2>>, []),       {ok, [1, 2], <<>>}),
+    test("opts duplicate tags on",    avm_cbor:decode(<<16#C1, 1>>, [{allow_tags, false}, {allow_tags, true}]), {ok, {tag, 1, 1}, <<>>}),
+    test("opts duplicate tags off",   avm_cbor:decode(<<16#C1, 1>>, [{allow_tags, true}, {allow_tags, false}]), {error, {unsupported_tag, 1}}),
+    test("opts duplicate limit",      avm_cbor:decode(<<16#82, 1, 2>>, [{max_items, 1}, {max_items, 3}]), {ok, [1, 2], <<>>}),
+    test("opts duplicate preferred",  avm_cbor:decode(<<16#18, 23>>, [{preferred, false}, {preferred, true}]), {error, {non_preferred_argument, 23}}),
+    test("opts improper list",        avm_cbor:decode(<<1>>, [{max_depth, 8} | invalid_tail]), {error, invalid_options_list}),
+    test("opts zero bytes rejected",  avm_cbor:decode(<<1>>, [{max_bytes, 0}]), {error, {invalid_option, {max_bytes, 0}}}),
+    test("opts zero items rejected",  avm_cbor:decode(<<1>>, [{max_items, 0}]), {error, {invalid_option, {max_items, 0}}}),
+    test("encode byte cap",           avm_cbor:encode([<<1, 2>>, <<3, 4>>], [{max_bytes, 5}]), {error, {max_bytes_exceeded, 5}}),
+    %% Pull-based continuation decode
+    test("continuation array budget 1",
+         continue_decode(<<16#83, 1, 2, 3>>, [], 1),
+         {done, [1, 2, 3], <<>>}),
+    test("continuation deterministic map",
+         continue_decode(<<16#A2, 1, 0, 2, 0>>, [{deterministic, true}], 2),
+         {done, {map, [{1, 0}, {2, 0}]}, <<>>}),
+    test("continuation malformed",
+         continue_decode(<<16#82, 1>>, [], 3),
+         {error, truncated}),
+    test("continuation invalid budget",
+         avm_cbor:decode_continue(invalid, 0),
+         {error, {invalid_budget, 0}}),
+    test("continuation max depth",
+         continue_decode(nested_arrays(128, <<0>>),
+                         [{max_depth, 128}, {max_items, 129}], 8),
+         nested_done(128, 0)),
+    %% Partial decode
+    partial_tests(),
     ok.
+
+continue_decode(Bin, Opts, Budget) ->
+    case avm_cbor:decode_start(Bin, Opts) of
+        {ok, Continuation} -> continue_decode_loop(Continuation, Budget, 20000);
+        {error, _} = Error -> Error
+    end.
+
+continue_decode_loop(_Continuation, _Budget, 0) ->
+    erlang:error(continuation_step_limit);
+continue_decode_loop(Continuation, Budget, Remaining) ->
+    case avm_cbor:decode_continue(Continuation, Budget) of
+        {more, Next} -> continue_decode_loop(Next, Budget, Remaining - 1);
+        Result -> Result
+    end.
+
+nested_arrays(0, Inner) -> Inner;
+nested_arrays(Count, Inner) ->
+    nested_arrays(Count - 1, <<16#81, Inner/binary>>).
+
+nested_done(0, Value) -> {done, Value, <<>>};
+nested_done(Count, Value) -> nested_done(Count - 1, [Value]).
+
+partial_tests() ->
+    test("partial uint type",        partial_type_of(<<16#18, 16#64>>),          unsigned),
+    test("partial uint deep",        partial_deep_of(<<16#18, 16#64>>),          {ok, 100}),
+    test("partial bstr type",        partial_type_of(<<16#44, 1, 2, 3, 4>>),     bytes),
+    test("partial array type",       partial_type_of(<<16#83, 1, 2, 3>>),        array),
+    test("partial array deep",       partial_deep_of(<<16#83, 1, 2, 3>>),        {ok, [1, 2, 3]}),
+    test("partial map deep",         partial_deep_of(<<16#A1, 1, 2>>),           {ok, {map, [{1, 2}]}}),
+    test("partial tag deep",         partial_deep_of(<<16#C1, 16#01>>),          {ok, {tag, 1, 1}}),
+    test("partial indef array deep", partial_deep_of(<<16#9F, 1, 2, 16#FF>>),    {ok, [1, 2]}),
+    test("partial empty",            avm_cbor:partial_decode(<<>>),              {error, empty}),
+    test("partial truncated",        avm_cbor:partial_decode(<<16#82, 16#01>>),  {error, truncated}),
+    test("partial duplicate limit",  partial_type_with_opts(<<16#82, 1, 2>>, [{max_items, 1}, {max_items, 3}]), array),
+    test("partial bstr chunk cap",    avm_cbor:partial_decode(<<16#5F, 16#40, 16#40, 16#40, 16#FF>>, [{max_items, 2}]), {error, {max_items_exceeded, 2}}),
+    test("partial zero bytes rejected", avm_cbor:partial_decode(<<1>>, [{max_bytes, 0}]), {error, {invalid_option, {max_bytes, 0}}}),
+    test("partial deterministic unsorted map", avm_cbor:partial_decode(<<16#A2, 2, 0, 1, 0>>, [{deterministic, true}]), {error, non_deterministic_map_order}),
+    test("partial deterministic rejects indef", avm_cbor:partial_decode(<<16#9F, 1, 16#FF>>, [{deterministic, true}]), {error, non_deterministic_indefinite}),
+    partial_walk_test(),
+    ok.
+
+%% Walk a map, skip the middle value, decode the rest.
+partial_walk_test() ->
+    Bin = <<16#A2, 16#01, 16#42, 1, 2, 16#03, 16#04>>,
+    {ok, P, <<>>} = avm_cbor:partial_decode(Bin),
+    test("partial walk count",       avm_cbor:partial_count(P),                  2),
+    test("partial walk length",      avm_cbor:partial_length(P),                 byte_size(Bin)),
+    {ok, C} = avm_cbor:partial_contents(P),
+    {ok, K1, R1} = avm_cbor:partial_decode(C),
+    test("partial walk key1",        avm_cbor:partial_deep_decode(K1),           {ok, 1}),
+    {ok, V1, R2} = avm_cbor:partial_decode(R1),
+    test("partial walk skip",        avm_cbor:partial_skip(V1),                  ok),
+    test("partial walk skip type",   avm_cbor:partial_type(V1),                  bytes),
+    {ok, K2, R3} = avm_cbor:partial_decode(R2),
+    test("partial walk key2",        avm_cbor:partial_deep_decode(K2),           {ok, 3}),
+    {ok, V2, <<>>} = avm_cbor:partial_decode(R3),
+    test("partial walk val2",        avm_cbor:partial_deep_decode(V2),           {ok, 4}),
+    ok.
+
+partial_type_of(Bin) ->
+    case avm_cbor:partial_decode(Bin) of
+        {ok, P, <<>>} -> avm_cbor:partial_type(P);
+        Other -> Other
+    end.
+
+partial_type_with_opts(Bin, Opts) ->
+    case avm_cbor:partial_decode(Bin, Opts) of
+        {ok, P, <<>>} -> avm_cbor:partial_type(P);
+        Other -> Other
+    end.
+
+partial_deep_of(Bin) ->
+    case avm_cbor:partial_decode(Bin) of
+        {ok, P, <<>>} -> avm_cbor:partial_deep_decode(P);
+        Other -> Other
+    end.
 
 roundtrip(Val) ->
     case avm_cbor:encode(Val) of

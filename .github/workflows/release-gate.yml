@@ -1,0 +1,410 @@
+name: Public Release Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-release-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  hygiene:
+    name: Public hygiene and secrets
+    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    timeout-minutes: 10
+    outputs:
+      performance: ${{ steps.routing.outputs.performance }}
+      otp: ${{ steps.routing.outputs.otp }}
+      coverage: ${{ steps.routing.outputs.coverage }}
+      atomvm: ${{ steps.routing.outputs.atomvm }}
+      esp_idf: ${{ steps.routing.outputs.esp_idf }}
+      package: ${{ steps.routing.outputs.package }}
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Classify changed paths
+        id: routing
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          PR_ACTION: ${{ github.event.action }}
+          PR_BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = "pull_request" ] &&
+             [ "${PR_ACTION}" = "synchronize" ] &&
+             git cat-file -e "${PR_BEFORE_SHA}^{commit}" 2>/dev/null; then
+            comparison_sha="${PR_BEFORE_SHA}"
+          elif [ "${EVENT_NAME}" = "pull_request" ] && [ -n "${PR_BASE_SHA}" ]; then
+            comparison_sha="${PR_BASE_SHA}"
+          elif [ "${EVENT_NAME}" = "push" ] &&
+               [ "${REF_TYPE}" != "tag" ] &&
+               [ -n "${PUSH_BEFORE_SHA}" ] &&
+               [ "${PUSH_BEFORE_SHA}" != "0000000000000000000000000000000000000000" ] &&
+               git cat-file -e "${PUSH_BEFORE_SHA}^{commit}" 2>/dev/null; then
+            comparison_sha="${PUSH_BEFORE_SHA}"
+          else
+            bash scripts/classify-ci-changes.sh public --all | tee "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          bash scripts/classify-ci-changes.sh public --diff "${comparison_sha}" HEAD | tee "${GITHUB_OUTPUT}"
+      - name: Read and validate release version
+        run: |
+          set -euo pipefail
+          release_version="$(python3 scripts/read-release-version.py)"
+          printf 'RELEASE_VERSION=%s\n' "${release_version}" >> "${GITHUB_ENV}"
+          printf 'Validated VERSION: %s\n' "${release_version}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            test "${GITHUB_REF}" = "refs/tags/${release_version}"
+            test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${release_version}^{}")"
+          fi
+      - name: Require signed-off pull-request commits
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          for commit in $(git rev-list "${BASE_SHA}..HEAD"); do
+            git log -1 --format=%B "${commit}" | grep -Eq '^Signed-off-by: .+ <[^<>[:space:]]+>$' || {
+              echo "missing Signed-off-by trailer on ${commit}" >&2
+              exit 1
+            }
+          done
+      - name: Check public boundaries and release metadata
+        run: |
+          set -euo pipefail
+          bash scripts/test-ci-change-routing.sh
+          bash scripts/check-public-hygiene.sh
+          bash scripts/check-release-metadata.sh
+      - name: Install checksum-pinned Gitleaks
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz"
+          curl -fsSL "${url}" -o /tmp/gitleaks.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum --check
+          mkdir -p /tmp/gitleaks
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp/gitleaks
+          /tmp/gitleaks/gitleaks detect --source . --no-git --redact --verbose
+
+  otp:
+    name: OTP ${{ matrix.otp }}
+    needs: [hygiene, performance]
+    if: >-
+      always() &&
+      needs.hygiene.result == 'success' &&
+      needs.hygiene.outputs.otp == 'true' &&
+      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
+    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        otp: ["25", "27"]
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Install Erlang and Rebar3
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          otp-version: ${{ matrix.otp }}
+          rebar3-version: ${{ matrix.otp == '25' && '3.24.0' || '3.25.1' }}
+      - name: Compile and test
+        run: |
+          set -euo pipefail
+          rebar3 compile
+          bash scripts/test-public.sh
+          rebar3 xref
+      - name: Dialyzer
+        if: matrix.otp == '27'
+        run: rebar3 dialyzer
+
+  coverage:
+    name: Coverage (95% line and branch)
+    needs: [hygiene, performance]
+    if: >-
+      always() &&
+      needs.hygiene.result == 'success' &&
+      needs.hygiene.outputs.coverage == 'true' &&
+      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
+    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Install Erlang and Rebar3
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          otp-version: "27"
+          rebar3-version: "3.25.1"
+      - name: Enforce true coverage gate
+        env:
+          COVERAGE_THRESHOLD: "95"
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p coverage
+          if [ -n "${BASE_SHA}" ]; then
+            base="$(git merge-base HEAD "${BASE_SHA}")"
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            base="HEAD^"
+          else
+            base="HEAD"
+          fi
+          git diff --output=coverage/changed.diff --unified=0 "${base}" -- src/avm_cbor.erl src/avm_cbor_cont.erl src/avm_cbor_partial.erl
+          COVERAGE_DIFF_FILE=coverage/changed.diff bash scripts/coverage-gate.sh
+
+  performance:
+    name: Previous SemVer performance gate
+    needs: hygiene
+    if: needs.hygiene.outputs.performance == 'true'
+    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact source and historical tags
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+          fetch-depth: 0
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Install Erlang
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          otp-version: "29"
+      - name: Prove fail-closed threshold behavior
+        run: |
+          bash scripts/test-benchmark-regression-gate.sh
+          bash scripts/test-semver-baseline-selector.sh
+      - name: Select and compare exact reachable SemVer baseline
+        env:
+          BENCHMARK_NOISE_TOLERANCE_PERCENT: "5"
+          BENCHMARK_RUNS: "5"
+        run: |
+          set -euo pipefail
+          bash scripts/benchmark-remediation.sh 2>&1 | tee /tmp/performance-gate.log
+          grep -F 'PERFORMANCE_GATE_OK noise_tolerance_percent=5.00' /tmp/performance-gate.log
+
+  atomvm:
+    name: AtomVM 0.6.6
+    needs: [hygiene, performance]
+    if: >-
+      always() &&
+      needs.hygiene.result == 'success' &&
+      needs.hygiene.outputs.atomvm == 'true' &&
+      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
+    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Install Erlang
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          otp-version: "25"
+      - name: Download checksum-verified AtomVM
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/atomvm
+          curl -fsSL -o /tmp/atomvm/atomvm https://github.com/atomvm/AtomVM/releases/download/v0.6.6/AtomVM-linux-x86_64-static-mbedtls-v0.6.6
+          curl -fsSL -o /tmp/atomvm/atomvmlib.avm https://github.com/atomvm/AtomVM/releases/download/v0.6.6/atomvmlib-v0.6.6.avm
+          echo "ddc739b21f386a65679a58c8e16ac6b092bbc7fa2f873fdbbf50c2033ae29858  /tmp/atomvm/atomvm" | sha256sum --check
+          echo "f8839044c15986f62fae9820c34b93cc6cb491361bb9fd9fefde56b4a711a312  /tmp/atomvm/atomvmlib.avm" | sha256sum --check
+          chmod +x /tmp/atomvm/atomvm
+          ATOMVM=/tmp/atomvm/atomvm ATOMVMLIB=/tmp/atomvm/atomvmlib.avm bash scripts/test-atomvm.sh
+
+  esp-idf:
+    name: ESP-IDF ${{ matrix.idf }}
+    needs: [hygiene, performance]
+    if: >-
+      always() &&
+      needs.hygiene.result == 'success' &&
+      needs.hygiene.outputs.esp_idf == 'true' &&
+      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
+    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        idf: ["v5.4.3", "v5.5.2"]
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Build official AtomVM 0.6.6 with ESP-IDF
+        run: bash scripts/test-esp-idf.sh "${{ matrix.idf }}"
+
+  package:
+    name: Hex package, docs, and consumers
+    needs: [hygiene, performance]
+    if: >-
+      always() &&
+      needs.hygiene.result == 'success' &&
+      needs.hygiene.outputs.package == 'true' &&
+      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
+    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ env.EXPECTED_SHA }}
+      - name: Assert exact checkout
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Read and validate release version
+        run: |
+          set -euo pipefail
+          release_version="$(python3 scripts/read-release-version.py)"
+          printf 'RELEASE_VERSION=%s\n' "${release_version}" >> "${GITHUB_ENV}"
+          printf 'Validated VERSION: %s\n' "${release_version}"
+      - name: Install Erlang, Elixir, and Rebar3
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+          rebar3-version: "3.25.1"
+      - name: Generate and inspect HexDocs
+        run: |
+          set -euo pipefail
+          python3 scripts/gen-api-docs.py --check
+          rebar3 ex_doc 2>&1 | tee /tmp/ex-doc.log
+          if grep -F 'warning: documentation references file' /tmp/ex-doc.log; then
+            echo 'generated HexDocs contain a broken file reference' >&2
+            exit 1
+          fi
+          index="$(find . -type f -name index.html | grep -E '(^|/)doc/index.html$' | grep -v '/plugins/' | head -n 1)"
+          test -n "${index}"
+          docs_dir="$(dirname "${index}")"
+          grep -RFl 'github.com/Atelje-Vagabond/atomvm-cbor' "${docs_dir}" >/dev/null
+          if ! grep -RFl "/blob/${RELEASE_VERSION}/" "${docs_dir}" >/dev/null && \
+             ! grep -RFl "/tree/${RELEASE_VERSION}/" "${docs_dir}" >/dev/null; then
+            echo "generated docs do not link to release ${RELEASE_VERSION}" >&2
+            exit 1
+          fi
+          echo "DOCS_DIR=${docs_dir}" >> "${GITHUB_ENV}"
+      - name: Build and dry-run package
+        env:
+          HEX_API_KEY: "00000000000000000000000000000000"
+        run: |
+          set -euo pipefail
+          rebar3 hex build
+          rebar3 hex build --unpack
+          rebar3 hex publish --repo hexpm --dry-run --yes 2>&1 | tee /tmp/hex-dry-run.log
+          if grep -F 'warning: documentation references file' /tmp/hex-dry-run.log; then
+            echo 'Hex dry-run documentation contains a broken file reference' >&2
+            exit 1
+          fi
+          package_dir="$(find _build -type d -name "atomvm_cbor-${RELEASE_VERSION}" -print -quit)"
+          test -n "${package_dir}"
+          bash scripts/check-hex-package.sh "${package_dir}"
+          package_tar="$(find _build -type f -name "atomvm_cbor-${RELEASE_VERSION}.tar" -print -quit)"
+          test -n "${package_tar}"
+          test "$(stat -c %s "${package_tar}")" -le 262144
+          docs_tar="/tmp/atomvm_cbor-${RELEASE_VERSION}-docs.tar.gz"
+          tar -czf "${docs_tar}" -C "${DOCS_DIR}" .
+          test "$(stat -c %s "${docs_tar}")" -le 524288
+          test "$(du -sb "${DOCS_DIR}" | cut -f1)" -le 2097152
+          test "$(du -sb "${package_dir}" | cut -f1)" -le 1048576
+          echo "PACKAGE_DIR=${package_dir}" >> "${GITHUB_ENV}"
+      - name: Compile clean Rebar3 consumer
+        run: |
+          set -euo pipefail
+          consumer="$(mktemp -d)"
+          mkdir -p "${consumer}/src" "${consumer}/_checkouts"
+          cp -a "${PACKAGE_DIR}" "${consumer}/_checkouts/avm_cbor"
+          printf '{erl_opts, [debug_info]}.\n{deps, [{avm_cbor, "~> %s", {pkg, atomvm_cbor}}]}.\n' "${RELEASE_VERSION}" > "${consumer}/rebar.config"
+          printf '{application, rebar_consumer, [{vsn, "0.0.0"}, {modules, [rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/rebar_consumer.app.src"
+          printf -- '-module(rebar_consumer).\n-export([run/0]).\nrun() -> avm_cbor:decode(<<1>>).\n' > "${consumer}/src/rebar_consumer.erl"
+          (cd "${consumer}" && rebar3 compile)
+      - name: Compile clean Mix consumer
+        run: |
+          set -euo pipefail
+          consumer="$(mktemp -d)"
+          mkdir -p "${consumer}/lib"
+          cp -a "${PACKAGE_DIR}" "${consumer}/avm_cbor_package"
+          printf 'defmodule MixConsumer.MixProject do\n  use Mix.Project\n  def project, do: [app: :mix_consumer, version: "0.0.0", deps: [{:avm_cbor, path: "avm_cbor_package"}]]\n  def application, do: [extra_applications: [:avm_cbor]]\nend\n' > "${consumer}/mix.exs"
+          printf 'defmodule MixConsumer do\n  def run, do: :avm_cbor.decode(<<1>>)\nend\n' > "${consumer}/lib/mix_consumer.ex"
+          (cd "${consumer}" && mix deps.get && mix compile --warnings-as-errors)
+
+  release-ready:
+    name: Exact-head release gate
+    needs: [hygiene, otp, coverage, performance, atomvm, esp-idf, package]
+    if: always()
+    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    steps:
+      - name: Require every selected job and no unselected job
+        env:
+          HYGIENE_RESULT: ${{ needs.hygiene.result }}
+          PERFORMANCE_REQUIRED: ${{ needs.hygiene.outputs.performance }}
+          PERFORMANCE_RESULT: ${{ needs.performance.result }}
+          OTP_REQUIRED: ${{ needs.hygiene.outputs.otp }}
+          OTP_RESULT: ${{ needs.otp.result }}
+          COVERAGE_REQUIRED: ${{ needs.hygiene.outputs.coverage }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+          ATOMVM_REQUIRED: ${{ needs.hygiene.outputs.atomvm }}
+          ATOMVM_RESULT: ${{ needs.atomvm.result }}
+          ESP_IDF_REQUIRED: ${{ needs.hygiene.outputs.esp_idf }}
+          ESP_IDF_RESULT: ${{ needs.esp-idf.result }}
+          PACKAGE_REQUIRED: ${{ needs.hygiene.outputs.package }}
+          PACKAGE_RESULT: ${{ needs.package.result }}
+        run: |
+          set -euo pipefail
+          test "${HYGIENE_RESULT}" = "success"
+          require_result() {
+            required="$1"
+            result="$2"
+            job_name="$3"
+            if [ "${required}" = "true" ]; then
+              test "${result}" = "success" || {
+                echo "selected job did not pass: ${job_name}=${result}" >&2
+                exit 1
+              }
+            else
+              test "${required}" = "false"
+              test "${result}" = "skipped" || {
+                echo "unselected job unexpectedly ran: ${job_name}=${result}" >&2
+                exit 1
+              }
+            fi
+          }
+          require_result "${PERFORMANCE_REQUIRED}" "${PERFORMANCE_RESULT}" performance
+          require_result "${OTP_REQUIRED}" "${OTP_RESULT}" otp
+          require_result "${COVERAGE_REQUIRED}" "${COVERAGE_RESULT}" coverage
+          require_result "${ATOMVM_REQUIRED}" "${ATOMVM_RESULT}" atomvm
+          require_result "${ESP_IDF_REQUIRED}" "${ESP_IDF_RESULT}" esp-idf
+          require_result "${PACKAGE_REQUIRED}" "${PACKAGE_RESULT}" package
+          echo "PUBLIC_RELEASE_GATE_OK"

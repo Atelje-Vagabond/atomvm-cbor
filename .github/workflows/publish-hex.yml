@@ -1,0 +1,207 @@
+name: Publish Hex release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  checks: read
+
+jobs:
+  preflight:
+    name: Tag and public preflight
+    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    timeout-minutes: 25
+    steps:
+      - name: Checkout selected tag
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Read and validate release version
+        run: |
+          set -euo pipefail
+          release_version="$(python3 scripts/read-release-version.py)"
+          test "${GITHUB_REF_TYPE}" = "tag"
+          test "${GITHUB_REF}" = "refs/tags/${release_version}"
+          printf 'RELEASE_VERSION=%s\n' "${release_version}" >> "${GITHUB_ENV}"
+          printf 'Validated release tag: %s\n' "${release_version}"
+      - name: Assert immutable release identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = "refs/tags/${RELEASE_VERSION}"
+          tag_commit="$(git rev-parse "refs/tags/${RELEASE_VERSION}^{}")"
+          test "$(git rev-parse HEAD)" = "${tag_commit}"
+          test "$(python3 scripts/read-release-version.py)" = "${RELEASE_VERSION}"
+          git fetch --force origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "${tag_commit}" refs/remotes/origin/main; then
+            echo "release tag commit is not reachable from origin/main: ${tag_commit}" >&2
+            exit 1
+          fi
+          tag_count="$(git tag --points-at HEAD | awk -v version="${RELEASE_VERSION}" '$0 == version { count++ } END { print count + 0 }')"
+          test "${tag_count}" -eq 1
+          if git ls-remote --exit-code --tags origin "refs/tags/v${RELEASE_VERSION}" >/dev/null 2>&1; then
+            echo "forbidden v-prefixed release tag exists: v${RELEASE_VERSION}" >&2
+            exit 1
+          fi
+          gate_count="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${tag_commit}/check-runs" \
+            --jq '[.check_runs[] | select(.name == "Exact-head release gate" and .conclusion == "success")] | length')"
+          test "${gate_count}" -ge 1
+          tag_gate_run_count="$(gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-gate.yml/runs" \
+            -f event=push -f status=success -f branch="${RELEASE_VERSION}" \
+            -f head_sha="${tag_commit}" \
+            --jq '[.workflow_runs[] | select(.head_sha == "'"${tag_commit}"'" and .head_branch == "'"${RELEASE_VERSION}"'" and .event == "push" and .conclusion == "success")] | length')"
+          if [ "${tag_gate_run_count}" -lt 1 ]; then
+            echo "successful exact release-tag gate is missing for ${RELEASE_VERSION}@${tag_commit}" >&2
+            exit 1
+          fi
+      - name: Install Erlang, Elixir, and Rebar3
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+          rebar3-version: "3.25.1"
+      - name: Run complete public gate
+        env:
+          HEX_API_KEY: "00000000000000000000000000000000"
+        run: |
+          set -euo pipefail
+          bash scripts/check-public-hygiene.sh
+          bash scripts/release-check.sh "${RELEASE_VERSION}"
+          COVERAGE_BASE_REF=HEAD^ bash scripts/coverage-gate.sh
+          rebar3 dialyzer
+          rebar3 ex_doc 2>&1 | tee /tmp/ex-doc.log
+          if grep -F 'warning: documentation references file' /tmp/ex-doc.log; then
+            echo 'generated HexDocs contain a broken file reference' >&2
+            exit 1
+          fi
+          index="$(find . -type f -name index.html | grep -E '(^|/)doc/index.html$' | grep -v '/plugins/' | head -n 1)"
+          test -n "${index}"
+          docs_dir="$(dirname "${index}")"
+          grep -RFl 'github.com/Atelje-Vagabond/atomvm-cbor' "${docs_dir}" >/dev/null
+          if ! grep -RFl "/blob/${RELEASE_VERSION}/" "${docs_dir}" >/dev/null && \
+             ! grep -RFl "/tree/${RELEASE_VERSION}/" "${docs_dir}" >/dev/null; then
+            echo "generated docs do not link to release ${RELEASE_VERSION}" >&2
+            exit 1
+          fi
+          rebar3 hex build
+          rebar3 hex build --unpack
+          rebar3 hex publish --repo hexpm --dry-run --yes 2>&1 | tee /tmp/hex-dry-run.log
+          if grep -F 'warning: documentation references file' /tmp/hex-dry-run.log; then
+            echo 'Hex dry-run documentation contains a broken file reference' >&2
+            exit 1
+          fi
+          package_dir="$(find _build -type d -name "atomvm_cbor-${RELEASE_VERSION}" -print -quit)"
+          test -n "${package_dir}"
+          bash scripts/check-hex-package.sh "${package_dir}"
+          package_tar="$(find _build -type f -name "atomvm_cbor-${RELEASE_VERSION}.tar" -print -quit)"
+          test -n "${package_tar}"
+          checksum="$(sha256sum "${package_tar}" | cut -d ' ' -f1)"
+          release_url="https://hex.pm/api/packages/atomvm_cbor/releases/${RELEASE_VERSION}"
+          if curl -fsS "${release_url}" >/dev/null; then
+            python3 scripts/verify-hex-release.py published --version "${RELEASE_VERSION}" --checksum "${checksum}"
+          else
+            code="$(curl -sS -o /dev/null -w '%{http_code}' "${release_url}")"
+            test "${code}" = "404"
+            python3 scripts/verify-hex-release.py absent --version "${RELEASE_VERSION}"
+          fi
+
+  publish:
+    name: Publish package, HexDocs, and GitHub release
+    needs: preflight
+    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    timeout-minutes: 25
+    environment: hex-production
+    permissions:
+      contents: write
+    env:
+      HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+    steps:
+      - name: Checkout selected tag
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Read and validate release version
+        run: |
+          set -euo pipefail
+          release_version="$(python3 scripts/read-release-version.py)"
+          test "${GITHUB_REF_TYPE}" = "tag"
+          test "${GITHUB_REF}" = "refs/tags/${release_version}"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${release_version}^{}")"
+          printf 'RELEASE_VERSION=%s\n' "${release_version}" >> "${GITHUB_ENV}"
+          printf 'Validated release tag: %s\n' "${release_version}"
+      - name: Install Erlang and Rebar3
+        uses: erlef/setup-beam@v1.24.1
+        with:
+          otp-version: "27"
+          elixir-version: "1.18"
+          rebar3-version: "3.25.1"
+      - name: Rebuild and determine publication state
+        id: state
+        run: |
+          set -euo pipefail
+          test -n "${HEX_API_KEY}"
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${RELEASE_VERSION}^{}")"
+          rebar3 hex build
+          package_tar="$(find _build -type f -name "atomvm_cbor-${RELEASE_VERSION}.tar" -print -quit)"
+          test -n "${package_tar}"
+          checksum="$(sha256sum "${package_tar}" | cut -d ' ' -f1)"
+          test -n "${checksum}"
+          echo "checksum=${checksum}" >> "${GITHUB_OUTPUT}"
+          release_url="https://hex.pm/api/packages/atomvm_cbor/releases/${RELEASE_VERSION}"
+          if curl -fsS "${release_url}" >/dev/null; then
+            echo "exists=true" >> "${GITHUB_OUTPUT}"
+          else
+            code="$(curl -sS -o /dev/null -w '%{http_code}' "${release_url}")"
+            test "${code}" = "404"
+            echo "exists=false" >> "${GITHUB_OUTPUT}"
+          fi
+      - name: Publish public Hex package and HexDocs
+        if: steps.state.outputs.exists == 'false'
+        run: rebar3 hex publish --repo hexpm --yes
+      - name: Verify public package identity, checksum, organization, and docs
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            if python3 scripts/verify-hex-release.py published --version "${RELEASE_VERSION}" --checksum "${{ steps.state.outputs.checksum }}"; then
+              exit 0
+            fi
+            echo "Hex propagation verification attempt ${attempt}/12 did not pass yet."
+            sleep 5
+          done
+          exit 1
+      - name: Create GitHub release if absent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            existing_target="$(gh release view "${RELEASE_VERSION}" --repo "${GITHUB_REPOSITORY}" --json targetCommitish --jq .targetCommitish)"
+            test "$(git rev-parse "${existing_target}^{commit}")" = "$(git rev-parse HEAD)"
+          else
+            gh release create "${RELEASE_VERSION}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --verify-tag \
+              --title "atomvm-cbor ${RELEASE_VERSION}" \
+              --notes-file ".github/releases/${RELEASE_VERSION}.md"
+          fi
+      - name: Verify published Rebar3 consumer
+        run: |
+          set -euo pipefail
+          consumer="$(mktemp -d)"
+          mkdir -p "${consumer}/src"
+          printf '{erl_opts, [debug_info]}.\n{deps, [{avm_cbor, "~> %s", {pkg, atomvm_cbor}}]}.\n' "${RELEASE_VERSION}" > "${consumer}/rebar.config"
+          printf '{application, published_rebar_consumer, [{vsn, "0.0.0"}, {modules, [published_rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/published_rebar_consumer.app.src"
+          printf -- '-module(published_rebar_consumer).\n-export([run/0]).\nrun() -> avm_cbor:decode(<<1>>).\n' > "${consumer}/src/published_rebar_consumer.erl"
+          (cd "${consumer}" && rebar3 compile)
+      - name: Verify published Mix consumer
+        run: |
+          set -euo pipefail
+          consumer="$(mktemp -d)"
+          mkdir -p "${consumer}/lib"
+          printf 'defmodule PublishedMixConsumer.MixProject do\n  use Mix.Project\n  def project, do: [app: :published_mix_consumer, version: "0.0.0", deps: [{:avm_cbor, "~> %s", hex: :atomvm_cbor}]]\n  def application, do: [extra_applications: [:avm_cbor]]\nend\n' "${RELEASE_VERSION}" > "${consumer}/mix.exs"
+          printf 'defmodule PublishedMixConsumer do\n  def run, do: :avm_cbor.decode(<<1>>)\nend\n' > "${consumer}/lib/published_mix_consumer.ex"
+          (cd "${consumer}" && mix local.hex --force && mix deps.get && mix compile --warnings-as-errors)

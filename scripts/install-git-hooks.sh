@@ -29,4 +29,4 @@ chmod +x scripts/local-pre-push-check.sh
 
 echo "Local pre-push hook installed."
 echo "Normal pushes run standard release checks."
-echo "release/* branch pushes and v* tag pushes also run ESP-IDF validation."
+echo "release/* branch pushes and numeric release-tag pushes also run ESP-IDF validation."
