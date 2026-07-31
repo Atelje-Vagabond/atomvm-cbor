@@ -147,6 +147,10 @@ package = job("package")
 if package.count("warning: documentation references file") != 2:
     raise SystemExit("package validation must reject broken HexDocs file references")
 
+publish_workflow = Path(".github/workflows/publish-hex.yml").read_text(encoding="utf-8")
+if publish_workflow.count("warning: documentation references file") != 2:
+    raise SystemExit("publication preflight must reject broken HexDocs file references")
+
 print("Release workflow routing, order, and unchanged 5 percent threshold passed.")
 PY
 
