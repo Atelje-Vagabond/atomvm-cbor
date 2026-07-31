@@ -17,7 +17,7 @@ First Hex.pm release of package `atomvm_cbor` and OTP application `avm_cbor`.
 
 - Options are normalized once into fixed tuple/record state instead of repeatedly scanning recursive proplists.
 - Malformed and truncated payloads return structured errors across full and partial paths.
-- Common host and attached-device encode/decode workloads are compared against the public `v0.1.1` baseline in the audited measurements.
+- Host workloads and three of four attached-device common paths improved against the public `v0.1.1` baseline; ESP32-S3 `decode/1` measured 2.05% slower.
 - Public term representations remain compatible with the historical API.
 
 ### Packaging
