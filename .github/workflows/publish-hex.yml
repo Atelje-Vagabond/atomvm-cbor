@@ -194,7 +194,7 @@ jobs:
           consumer="$(mktemp -d)"
           mkdir -p "${consumer}/src"
           printf '{erl_opts, [debug_info]}.\n{deps, [{avm_cbor, "~> %s", {pkg, atomvm_cbor}}]}.\n' "${RELEASE_VERSION}" > "${consumer}/rebar.config"
-          printf '{application, published_rebar_consumer, [{vsn, "0.0.0"}, {modules, [published_rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/published_rebar_consumer.app.src"
+          printf '{application, published_rebar_consumer, [{description, "Published-package Rebar3 consumer"}, {vsn, "0.0.0"}, {modules, [published_rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/published_rebar_consumer.app.src"
           printf -- '-module(published_rebar_consumer).\n-export([run/0]).\nrun() -> avm_cbor:decode(<<1>>).\n' > "${consumer}/src/published_rebar_consumer.erl"
           (cd "${consumer}" && rebar3 compile)
       - name: Verify published Mix consumer

@@ -347,7 +347,7 @@ jobs:
           mkdir -p "${consumer}/src" "${consumer}/_checkouts"
           cp -a "${PACKAGE_DIR}" "${consumer}/_checkouts/avm_cbor"
           printf '{erl_opts, [debug_info]}.\n{deps, [{avm_cbor, "~> %s", {pkg, atomvm_cbor}}]}.\n' "${RELEASE_VERSION}" > "${consumer}/rebar.config"
-          printf '{application, rebar_consumer, [{vsn, "0.0.0"}, {modules, [rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/rebar_consumer.app.src"
+          printf '{application, rebar_consumer, [{description, "Release-gate Rebar3 consumer"}, {vsn, "0.0.0"}, {modules, [rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/rebar_consumer.app.src"
           printf -- '-module(rebar_consumer).\n-export([run/0]).\nrun() -> avm_cbor:decode(<<1>>).\n' > "${consumer}/src/rebar_consumer.erl"
           (cd "${consumer}" && rebar3 compile)
       - name: Compile clean Mix consumer
