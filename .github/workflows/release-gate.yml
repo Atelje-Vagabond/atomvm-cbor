@@ -24,6 +24,13 @@ jobs:
     name: Public hygiene and secrets
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 10
+    outputs:
+      performance: ${{ steps.routing.outputs.performance }}
+      otp: ${{ steps.routing.outputs.otp }}
+      coverage: ${{ steps.routing.outputs.coverage }}
+      atomvm: ${{ steps.routing.outputs.atomvm }}
+      esp_idf: ${{ steps.routing.outputs.esp_idf }}
+      package: ${{ steps.routing.outputs.package }}
     steps:
       - name: Checkout exact source
         uses: actions/checkout@v7.0.1
@@ -32,6 +39,34 @@ jobs:
           fetch-depth: 0
       - name: Assert exact checkout
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Classify changed paths
+        id: routing
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          PR_ACTION: ${{ github.event.action }}
+          PR_BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = "pull_request" ] &&
+             [ "${PR_ACTION}" = "synchronize" ] &&
+             git cat-file -e "${PR_BEFORE_SHA}^{commit}" 2>/dev/null; then
+            comparison_sha="${PR_BEFORE_SHA}"
+          elif [ "${EVENT_NAME}" = "pull_request" ] && [ -n "${PR_BASE_SHA}" ]; then
+            comparison_sha="${PR_BASE_SHA}"
+          elif [ "${EVENT_NAME}" = "push" ] &&
+               [ "${REF_TYPE}" != "tag" ] &&
+               [ -n "${PUSH_BEFORE_SHA}" ] &&
+               [ "${PUSH_BEFORE_SHA}" != "0000000000000000000000000000000000000000" ] &&
+               git cat-file -e "${PUSH_BEFORE_SHA}^{commit}" 2>/dev/null; then
+            comparison_sha="${PUSH_BEFORE_SHA}"
+          else
+            bash scripts/classify-ci-changes.sh public --all | tee "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          bash scripts/classify-ci-changes.sh public --diff "${comparison_sha}" HEAD | tee "${GITHUB_OUTPUT}"
       - name: Read and validate release version
         run: |
           set -euo pipefail
@@ -57,6 +92,7 @@ jobs:
       - name: Check public boundaries and release metadata
         run: |
           set -euo pipefail
+          bash scripts/test-ci-change-routing.sh
           bash scripts/check-public-hygiene.sh
           bash scripts/check-release-metadata.sh
       - name: Install checksum-pinned Gitleaks
@@ -71,7 +107,12 @@ jobs:
 
   otp:
     name: OTP ${{ matrix.otp }}
-    needs: performance
+    needs: [hygiene, performance]
+    if: >-
+      always() &&
+      needs.hygiene.result == 'success' &&
+      needs.hygiene.outputs.otp == 'true' &&
+      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 20
     strategy:
@@ -102,7 +143,12 @@ jobs:
 
   coverage:
     name: Coverage (95% line and branch)
-    needs: performance
+    needs: [hygiene, performance]
+    if: >-
+      always() &&
+      needs.hygiene.result == 'success' &&
+      needs.hygiene.outputs.coverage == 'true' &&
+      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 20
     steps:
@@ -138,6 +184,7 @@ jobs:
   performance:
     name: Previous SemVer performance gate
     needs: hygiene
+    if: needs.hygiene.outputs.performance == 'true'
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 20
     steps:
@@ -167,7 +214,12 @@ jobs:
 
   atomvm:
     name: AtomVM 0.6.6
-    needs: performance
+    needs: [hygiene, performance]
+    if: >-
+      always() &&
+      needs.hygiene.result == 'success' &&
+      needs.hygiene.outputs.atomvm == 'true' &&
+      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 15
     steps:
@@ -194,7 +246,12 @@ jobs:
 
   esp-idf:
     name: ESP-IDF ${{ matrix.idf }}
-    needs: performance
+    needs: [hygiene, performance]
+    if: >-
+      always() &&
+      needs.hygiene.result == 'success' &&
+      needs.hygiene.outputs.esp_idf == 'true' &&
+      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 35
     strategy:
@@ -213,7 +270,12 @@ jobs:
 
   package:
     name: Hex package, docs, and consumers
-    needs: performance
+    needs: [hygiene, performance]
+    if: >-
+      always() &&
+      needs.hygiene.result == 'success' &&
+      needs.hygiene.outputs.package == 'true' &&
+      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 25
     steps:
@@ -293,6 +355,48 @@ jobs:
   release-ready:
     name: Exact-head release gate
     needs: [hygiene, otp, coverage, performance, atomvm, esp-idf, package]
+    if: always()
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     steps:
-      - run: echo "PUBLIC_RELEASE_GATE_OK"
+      - name: Require every selected job and no unselected job
+        env:
+          HYGIENE_RESULT: ${{ needs.hygiene.result }}
+          PERFORMANCE_REQUIRED: ${{ needs.hygiene.outputs.performance }}
+          PERFORMANCE_RESULT: ${{ needs.performance.result }}
+          OTP_REQUIRED: ${{ needs.hygiene.outputs.otp }}
+          OTP_RESULT: ${{ needs.otp.result }}
+          COVERAGE_REQUIRED: ${{ needs.hygiene.outputs.coverage }}
+          COVERAGE_RESULT: ${{ needs.coverage.result }}
+          ATOMVM_REQUIRED: ${{ needs.hygiene.outputs.atomvm }}
+          ATOMVM_RESULT: ${{ needs.atomvm.result }}
+          ESP_IDF_REQUIRED: ${{ needs.hygiene.outputs.esp_idf }}
+          ESP_IDF_RESULT: ${{ needs.esp-idf.result }}
+          PACKAGE_REQUIRED: ${{ needs.hygiene.outputs.package }}
+          PACKAGE_RESULT: ${{ needs.package.result }}
+        run: |
+          set -euo pipefail
+          test "${HYGIENE_RESULT}" = "success"
+          require_result() {
+            required="$1"
+            result="$2"
+            job_name="$3"
+            if [ "${required}" = "true" ]; then
+              test "${result}" = "success" || {
+                echo "selected job did not pass: ${job_name}=${result}" >&2
+                exit 1
+              }
+            else
+              test "${required}" = "false"
+              test "${result}" = "skipped" || {
+                echo "unselected job unexpectedly ran: ${job_name}=${result}" >&2
+                exit 1
+              }
+            fi
+          }
+          require_result "${PERFORMANCE_REQUIRED}" "${PERFORMANCE_RESULT}" performance
+          require_result "${OTP_REQUIRED}" "${OTP_RESULT}" otp
+          require_result "${COVERAGE_REQUIRED}" "${COVERAGE_RESULT}" coverage
+          require_result "${ATOMVM_REQUIRED}" "${ATOMVM_RESULT}" atomvm
+          require_result "${ESP_IDF_REQUIRED}" "${ESP_IDF_RESULT}" esp-idf
+          require_result "${PACKAGE_REQUIRED}" "${PACKAGE_RESULT}" package
+          echo "PUBLIC_RELEASE_GATE_OK"

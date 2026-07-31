@@ -121,17 +121,21 @@ workloads() ->
         {"malformed_declared_array", 5000, fun malformed_decode/0}
     ].
 
--ifdef(BASELINE).
-partial_workload() -> {"partial_decode_nested", unavailable, unavailable}.
-deterministic_workloads() -> [
-    {"deterministic_map_encode", unavailable, unavailable},
-    {"deterministic_map_decode", unavailable, unavailable}
-].
--else.
+-ifdef(HAS_PARTIAL).
 partial_workload() -> {"partial_decode_nested", 3000, fun partial_decode/0}.
+-else.
+partial_workload() -> {"partial_decode_nested", unavailable, unavailable}.
+-endif.
+
+-ifdef(HAS_DETERMINISTIC).
 deterministic_workloads() -> [
     {"deterministic_map_encode", 2000, fun deterministic_encode/0},
     {"deterministic_map_decode", 2000, fun deterministic_decode/0}
+].
+-else.
+deterministic_workloads() -> [
+    {"deterministic_map_encode", unavailable, unavailable},
+    {"deterministic_map_decode", unavailable, unavailable}
 ].
 -endif.
 
@@ -201,12 +205,14 @@ sequence_decode() ->
     32 = length(Values),
     ok.
 
--ifndef(BASELINE).
+-ifdef(HAS_PARTIAL).
 partial_decode() ->
     {ok, Partial, <<>>} = avm_cbor:partial_decode(?NESTED),
     array = avm_cbor:partial_type(Partial),
     ok.
+-endif.
 
+-ifdef(HAS_DETERMINISTIC).
 deterministic_encode() ->
     {ok, _} = avm_cbor:encode(?DETERMINISTIC_TERM, [{deterministic, true}]),
     ok.
@@ -385,7 +391,7 @@ change_json(Baseline, Fixed, Index) ->
 comparison_markdown(BaselineMeta, FixedMeta, Comparisons, NoiseTolerance, Gate) ->
     Rows = [comparison_markdown_row(Row) || Row <- Comparisons],
     [
-        "# atomvm-cbor 0.2.0 host benchmark\n\n",
+        "# atomvm-cbor host benchmark\n\n",
         "Lower timings are better. A negative change means the fixed implementation is faster.\n\n",
         io_lib:format("- Baseline: `~s` (`~s`)\n", [
             proplists:get_value("mode", BaselineMeta),
@@ -402,14 +408,14 @@ comparison_markdown(BaselineMeta, FixedMeta, Comparisons, NoiseTolerance, Gate) 
             proplists:get_value("samples", FixedMeta),
             proplists:get_value("warmup_iterations", FixedMeta)]),
         io_lib:format(
-            "- Regression gate: **~s**; every comparable median and p95 must stay within +~.2f% of v0.1.1. The tolerance covers scheduler and clock noise; any larger positive change exits nonzero.\n\n",
+            "- Regression gate: **~s**; every comparable median and p95 must stay within +~.2f% of the selected baseline. The tolerance covers scheduler and clock noise; any larger positive change exits nonzero.\n\n",
             [Gate, NoiseTolerance]
         ),
-        "| Workload | v0.1.1 median ns | Fixed median ns | Median change | v0.1.1 p95 ns | Fixed p95 ns | p95 change | Fixed MAD ns |\n",
+        "| Workload | Baseline median ns | Current median ns | Median change | Baseline p95 ns | Current p95 ns | p95 change | Current MAD ns |\n",
         "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n",
         Rows,
-        "\n`partial_decode_nested`, `deterministic_map_encode`, and `deterministic_map_decode` are N/A for v0.1.1 because that exact tag has neither the partial API nor the deterministic option. The fixed timings are retained so every required representative workload is measured.\n\n",
-        "The malformed workload expects v0.1.1's `truncated` result and the fixed implementation's earlier global-budget rejection. It therefore measures each version's correct failure path rather than forcing identical error semantics.\n\n",
+        "\nA workload is N/A only when capability probing proves that the selected baseline does not expose the required API or option. Current timings remain visible for every required representative workload.\n\n",
+        "The malformed workload accepts each version's controlled failure path rather than forcing identical error vocabulary across releases.\n\n",
         "GC counters and heap deltas are recorded in the CSV and JSON artifacts. They are observational BEAM process/runtime counters, not exact allocation counts.\n"
     ].
 

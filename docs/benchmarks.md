@@ -22,11 +22,29 @@ stale hard-coded baseline while keeping the comparison reproducible and
 auditable. APIs absent from the selected baseline are reported as `N/A` rather
 than inferred.
 
-CI deliberately runs public hygiene first and the performance gate by itself
-second. Only after the unchanged +5% regression gate passes do the remaining
-OTP, coverage, AtomVM, ESP-IDF, and package jobs fan out across the two
-self-hosted runners. This prevents expensive downstream work from running for
-an unaudited or regressing candidate.
+CI always runs public hygiene and changed-path policy first. A newly opened PR
+is classified against its base; later synchronize events use the previous exact
+PR head, so a documentation or workflow-policy follow-up does not replay an
+unchanged runtime suite. Deleted paths are classified, unknown executable paths
+fail closed into the broad validation class, and a tag, manual run, or missing
+comparison history selects the complete chain.
+
+When runtime or benchmark paths select performance, that gate runs alone after
+hygiene. Only after the unchanged +5% regression limit passes do the other
+selected OTP, coverage, AtomVM, ESP-IDF, and package jobs fan out across the two
+self-hosted runners. Documentation/release-note changes select the package job
+without reserving unrelated compiler or firmware capacity. The final job checks
+that every selected job passed and every unselected job was actually skipped;
+an empty, ambiguous, or inconsistent routing result fails closed.
+
+Each baseline/current measurement starts a fresh Erlang VM with the same single
+normal scheduler plus one dirty CPU and one dirty I/O scheduler. Five runs
+alternate baseline-first and current-first order, then aggregate the run-level
+statistics by median. This removes scheduler migration as a dominant source of
+sub-microsecond p95 noise without relaxing the +5% limit or hiding an individual
+failure. Baseline capabilities are probed from the selected tag, so APIs absent
+from an old baseline are `N/A`; future baselines are not forced through a
+release-specific compile flag.
 
 See the [0.2.0 validation report](benchmarks/0.2.0.md) for the matched host,
 ESP32-S3, and RP2040 evidence.

@@ -25,18 +25,49 @@ if ! git diff --quiet -- src/avm_cbor.erl src/avm_cbor_cont.erl src/avm_cbor_par
     exit 1
 fi
 
+# Use identical, minimal scheduler topology for every fresh baseline/current
+# VM. This controls scheduler migration without changing the regression limit.
+erl_benchmark=(erl +S 1:1 +SDcpu 1:1 +SDio 1)
+
 baseline_dir="$(mktemp -d)"
 fixed_dir="$(mktemp -d)"
 trap 'rm -rf "${baseline_dir}" "${fixed_dir}"' EXIT
 
 mkdir -p "${baseline_dir}/src" "${baseline_dir}/ebin" "${fixed_dir}/ebin" bench/results
-git cat-file blob "${baseline_tag}:src/avm_cbor.erl" > "${baseline_dir}/src/avm_cbor.erl"
-printf 'PERFORMANCE_BASELINE_SOURCE '
-sha256sum "${baseline_dir}/src/avm_cbor.erl"
+git archive "${baseline_tag}" src | tar -x -C "${baseline_dir}"
+printf 'PERFORMANCE_BASELINE_SOURCES\n'
+find "${baseline_dir}/src" -maxdepth 1 -type f \
+    \( -name '*.erl' -o -name '*.hrl' \) -print0 | sort -z | xargs -0 sha256sum
 
-erlc -Wall -DBASELINE -o "${baseline_dir}/ebin" \
-    "${baseline_dir}/src/avm_cbor.erl" bench/remediation_benchmark.erl
-erlc -Wall -I src -o "${fixed_dir}/ebin" \
+baseline_sources=("${baseline_dir}"/src/*.erl)
+erlc -Wall -I "${baseline_dir}/src" -o "${baseline_dir}/ebin" \
+    "${baseline_sources[@]}"
+read -r baseline_has_partial baseline_has_deterministic < <(
+    "${erl_benchmark[@]}" -noshell -pa "${baseline_dir}/ebin" -eval '
+        Exports = avm_cbor:module_info(exports),
+        HasPartial = lists:member({partial_decode, 1}, Exports),
+        HasDeterministic = case catch avm_cbor:decode(
+            <<16#9F, 1, 16#FF>>, [{deterministic, true}]) of
+            {error, non_deterministic_indefinite} -> true;
+            _ -> false
+        end,
+        io:format("~p ~p~n", [HasPartial, HasDeterministic]),
+        halt().'
+)
+printf 'PERFORMANCE_BASELINE_CAPABILITIES partial=%s deterministic=%s\n' \
+    "${baseline_has_partial}" "${baseline_has_deterministic}"
+
+baseline_defines=()
+if [ "${baseline_has_partial}" = true ]; then
+    baseline_defines+=(-DHAS_PARTIAL)
+fi
+if [ "${baseline_has_deterministic}" = true ]; then
+    baseline_defines+=(-DHAS_DETERMINISTIC)
+fi
+erlc -Wall -I "${baseline_dir}/src" "${baseline_defines[@]}" \
+    -o "${baseline_dir}/ebin" bench/remediation_benchmark.erl
+erlc -Wall -I src -DHAS_PARTIAL -DHAS_DETERMINISTIC \
+    -o "${fixed_dir}/ebin" \
     src/avm_cbor.erl src/avm_cbor_cont.erl src/avm_cbor_partial.erl \
     bench/remediation_benchmark.erl
 
@@ -60,25 +91,25 @@ for run in $(seq 1 "${runs}"); do
     fixed_paths+=("\"${fixed_path}\"")
 
     if (( run % 2 == 1 )); then
-        erl -noshell -pa "${baseline_dir}/ebin" -eval \
+        "${erl_benchmark[@]}" -noshell -pa "${baseline_dir}/ebin" -eval \
             "ok = remediation_benchmark:run(\"baseline-${baseline_version}\", \"${baseline_commit}\", \"${baseline_path}\"), halt()."
-        erl -noshell -pa "${fixed_dir}/ebin" -eval \
+        "${erl_benchmark[@]}" -noshell -pa "${fixed_dir}/ebin" -eval \
             "ok = remediation_benchmark:run(\"current-${current_version}\", \"${fixed_commit}\", \"${fixed_path}\"), halt()."
     else
-        erl -noshell -pa "${fixed_dir}/ebin" -eval \
+        "${erl_benchmark[@]}" -noshell -pa "${fixed_dir}/ebin" -eval \
             "ok = remediation_benchmark:run(\"current-${current_version}\", \"${fixed_commit}\", \"${fixed_path}\"), halt()."
-        erl -noshell -pa "${baseline_dir}/ebin" -eval \
+        "${erl_benchmark[@]}" -noshell -pa "${baseline_dir}/ebin" -eval \
             "ok = remediation_benchmark:run(\"baseline-${baseline_version}\", \"${baseline_commit}\", \"${baseline_path}\"), halt()."
     fi
 done
 
 baseline_path_list="$(IFS=,; echo "${baseline_paths[*]}")"
 fixed_path_list="$(IFS=,; echo "${fixed_paths[*]}")"
-erl -noshell -pa "${baseline_dir}/ebin" -eval \
+"${erl_benchmark[@]}" -noshell -pa "${baseline_dir}/ebin" -eval \
     "ok = remediation_benchmark:aggregate([${baseline_path_list}], \"bench/results/${result_id}-baseline.csv\"), halt()."
-erl -noshell -pa "${fixed_dir}/ebin" -eval \
+"${erl_benchmark[@]}" -noshell -pa "${fixed_dir}/ebin" -eval \
     "ok = remediation_benchmark:aggregate([${fixed_path_list}], \"bench/results/${result_id}-current.csv\"), halt()."
-erl -noshell -pa "${fixed_dir}/ebin" -eval \
+"${erl_benchmark[@]}" -noshell -pa "${fixed_dir}/ebin" -eval \
     'ok = remediation_benchmark:compare(
         "bench/results/'"${result_id}"'-baseline.csv",
         "bench/results/'"${result_id}"'-current.csv",
