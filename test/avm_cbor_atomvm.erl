@@ -118,6 +118,10 @@ run_tests() ->
     test("decode seq item cap",      avm_cbor:decode_sequence(<<1, 2, 3>>, [{max_items, 2}]), {error, {max_items_exceeded, 2}}),
     test("decode global nested cap", avm_cbor:decode(<<16#82, 16#82, 1, 2, 16#82, 3, 4>>, [{max_items, 6}]), {error, {max_items_exceeded, 6}}),
     test("decode global nested exact", avm_cbor:decode(<<16#82, 16#82, 1, 2, 16#82, 3, 4>>, [{max_items, 7}]), {ok, [[1, 2], [3, 4]], <<>>}),
+    test("decode fixed-cost mixed fallback", avm_cbor:decode(<<16#83, 0, 16#18, 24, 16#20>>), {ok, [0, 24, -1], <<>>}),
+    test("decode fixed-cost exact cap", avm_cbor:decode(<<16#83, 0, 1, 2>>, [{max_items, 4}]), {ok, [0, 1, 2], <<>>}),
+    test("decode fixed-cost over cap", avm_cbor:decode(<<16#83, 0, 1, 2>>, [{max_items, 3}]), {error, {max_items_exceeded, 3}}),
+    test("decode fixed-cost nested cap", avm_cbor:decode(<<16#82, 16#81, 0, 0>>, [{max_items, 3}]), {error, {max_items_exceeded, 3}}),
     test("decode cumulative strings", avm_cbor:decode(<<16#83, 16#41, $a, 16#41, $b, 16#41, $c>>, [{max_items, 4}, {max_total_string_bytes, 2}]), {error, {max_total_string_bytes_exceeded, 2}}),
     %% UTF-8 validation
     test("utf8 valid ascii",         avm_cbor:decode(<<16#61, 16#61>>),          {ok, {text, <<"a">>}, <<>>}),
@@ -141,9 +145,47 @@ run_tests() ->
     test("opts zero bytes rejected",  avm_cbor:decode(<<1>>, [{max_bytes, 0}]), {error, {invalid_option, {max_bytes, 0}}}),
     test("opts zero items rejected",  avm_cbor:decode(<<1>>, [{max_items, 0}]), {error, {invalid_option, {max_items, 0}}}),
     test("encode byte cap",           avm_cbor:encode([<<1, 2>>, <<3, 4>>], [{max_bytes, 5}]), {error, {max_bytes_exceeded, 5}}),
+    %% Pull-based continuation decode
+    test("continuation array budget 1",
+         continue_decode(<<16#83, 1, 2, 3>>, [], 1),
+         {done, [1, 2, 3], <<>>}),
+    test("continuation deterministic map",
+         continue_decode(<<16#A2, 1, 0, 2, 0>>, [{deterministic, true}], 2),
+         {done, {map, [{1, 0}, {2, 0}]}, <<>>}),
+    test("continuation malformed",
+         continue_decode(<<16#82, 1>>, [], 3),
+         {error, truncated}),
+    test("continuation invalid budget",
+         avm_cbor:decode_continue(invalid, 0),
+         {error, {invalid_budget, 0}}),
+    test("continuation max depth",
+         continue_decode(nested_arrays(128, <<0>>),
+                         [{max_depth, 128}, {max_items, 129}], 8),
+         nested_done(128, 0)),
     %% Partial decode
     partial_tests(),
     ok.
+
+continue_decode(Bin, Opts, Budget) ->
+    case avm_cbor:decode_start(Bin, Opts) of
+        {ok, Continuation} -> continue_decode_loop(Continuation, Budget, 20000);
+        {error, _} = Error -> Error
+    end.
+
+continue_decode_loop(_Continuation, _Budget, 0) ->
+    erlang:error(continuation_step_limit);
+continue_decode_loop(Continuation, Budget, Remaining) ->
+    case avm_cbor:decode_continue(Continuation, Budget) of
+        {more, Next} -> continue_decode_loop(Next, Budget, Remaining - 1);
+        Result -> Result
+    end.
+
+nested_arrays(0, Inner) -> Inner;
+nested_arrays(Count, Inner) ->
+    nested_arrays(Count - 1, <<16#81, Inner/binary>>).
+
+nested_done(0, Value) -> {done, Value, <<>>};
+nested_done(Count, Value) -> nested_done(Count - 1, [Value]).
 
 partial_tests() ->
     test("partial uint type",        partial_type_of(<<16#18, 16#64>>),          unsigned),

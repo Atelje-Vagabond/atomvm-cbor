@@ -30,7 +30,7 @@ Mix projects use:
 - Definite and bounded indefinite-length strings, arrays, and maps.
 - Preferred serialization and deterministic encoding/validation under explicit options.
 - Duplicate-map-key rejection and encoded-key ordering checks in deterministic decode.
-- Full decode, complete-input decode, CBOR sequence decode, and deferred partial decode.
+- Full decode, pull-based continuation decode, complete-input decode, CBOR sequence decode, and deferred partial decode.
 - Depth, node, input-byte, per-string, cumulative-string, and partial-string limits.
 - Structured errors for malformed, truncated, unsupported, and resource-bound inputs.
 - OTP 25+ and AtomVM 0.6.6 compatibility.
@@ -60,6 +60,22 @@ avm_cbor:encode(Value, Options).
 ```
 
 `decode/1,2` consumes one value and returns `{ok, Value, Rest}`. `decode_all/1,2` requires a complete input. `decode_sequence/1,2` returns all complete sequence items and retains a truncated final item as `Rest`.
+
+### Pull-based continuation decode
+
+```erlang
+{ok, State0} = avm_cbor:decode_start(Binary, Options),
+case avm_cbor:decode_continue(State0, Budget) of
+    {done, Value, Rest} -> use(Value, Rest);
+    {more, State1} -> schedule_next(State1);
+    {error, Reason} -> reject(Reason)
+end.
+```
+
+`Budget` is a positive bound on explicit parser transitions. The returned state
+is immutable and opaque. The decoder never sleeps or yields; event-loop pacing
+belongs to the caller. This is not a streaming-input API: `Binary` must already
+exist when `decode_start/2` is called.
 
 ## Partial and deferred decode
 
@@ -95,9 +111,23 @@ Options are normalized once into fixed internal state. Recursive paths do not re
 
 `deterministic=true` rejects indefinite-length input, non-preferred width choices, duplicate map keys, and map keys not ordered by their original encoded bytes. `ble_options/0` provides a stricter device-oriented profile.
 
+Treat options as trusted application policy. Do not allow a network client to
+raise them. Enforce the same or a smaller byte ceiling at transport ingress
+before buffering the complete request, use a lower fixed profile on targets
+that cannot allocate the defaults, and require empty trailing `Rest` for
+protocols that permit exactly one item.
+
+Large definite containers made entirely of preferred one-byte unsigned values
+use a bounded fixed-cost path. It is independently capped at 4095 direct nodes,
+so caller-raised limits cannot turn it into an unbounded speculative
+allocation. Mixed, malformed, deterministic, nested, multi-byte, or larger
+containers use the general bounded decoder and retain the same errors.
+
 ## Documentation and validation
 
 - [API guide](docs/api.md)
+- [Decoder policy and security limits](docs/decoder-policy.md)
+- [Pinned AtomVM memory evidence](docs/atomvm-memory-internals.md)
 - [Benchmark methodology](docs/benchmarks.md)
 - [Changelog](CHANGELOG.md)
 

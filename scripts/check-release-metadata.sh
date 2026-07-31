@@ -26,6 +26,40 @@ fi
 
 sha256sum --check scripts/source-integrity.sha256
 
+python3 - <<'PY'
+import re
+from pathlib import Path
+
+workflow = Path(".github/workflows/release-gate.yml").read_text(encoding="utf-8")
+
+
+def job(name: str) -> str:
+    match = re.search(
+        rf"^  {re.escape(name)}:\n(.*?)(?=^  [a-z0-9-]+:\n|\Z)",
+        workflow,
+        re.MULTILINE | re.DOTALL,
+    )
+    if match is None:
+        raise SystemExit(f"release workflow job is missing: {name}")
+    return match.group(1)
+
+
+performance = job("performance")
+if not re.search(r"^    needs: hygiene$", performance, re.MULTILINE):
+    raise SystemExit("performance must run only after hygiene")
+if 'BENCHMARK_NOISE_TOLERANCE_PERCENT: "5"' not in performance:
+    raise SystemExit("performance regression threshold must remain 5 percent")
+if "scripts/test-semver-baseline-selector.sh" not in performance:
+    raise SystemExit("performance must prove fail-closed SemVer selection")
+
+for name in ("otp", "coverage", "atomvm", "esp-idf", "package"):
+    body = job(name)
+    if not re.search(r"^    needs: performance$", body, re.MULTILINE):
+        raise SystemExit(f"{name} must fan out only after performance")
+
+print("Release workflow order and unchanged 5 percent threshold passed.")
+PY
+
 for required in \
     README.md CHANGELOG.md LICENSE VERSION rebar.config docs/api.md \
     src/avm_cbor.app.src .github/releases/0.2.0.md; do

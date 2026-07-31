@@ -67,6 +67,7 @@ compile_counter(OutDir) ->
 compile_instrumented_modules() ->
     Sources = [
         {avm_cbor, "src/avm_cbor.erl"},
+        {avm_cbor_cont, "src/avm_cbor_cont.erl"},
         {avm_cbor_partial, "src/avm_cbor_partial.erl"}
     ],
     {State, Modules} = lists:foldl(
@@ -404,7 +405,9 @@ normalize_line(Anno) ->
 
 is_critical(Function) ->
     lists:member(Function, [
-        decode, decode_normalized, decode_all, decode_all_normalized,
+        decode, decode_start, decode_continue, decode_normalized,
+        start, continue, run, step, step_next,
+        decode_all, decode_all_normalized,
         decode_all_items, decode_all_small_items, decode_sequence,
         decode_sequence_normalized, decode_sequence_items,
         decode_sequence_small_items, normalize_opts,
@@ -467,6 +470,7 @@ run_tests(_Modules) ->
         avm_cbor_deterministic_decode_tests,
         avm_cbor_security_tests,
         avm_cbor_property_tests,
+        avm_cbor_continuation_tests,
         avm_cbor_internal_branch_tests
     ],
     case eunit:test(Tests, [verbose]) of
@@ -510,6 +514,7 @@ annotate(Manifest, Hits, ChangedLines) ->
     ].
 
 module_source(avm_cbor) -> "src/avm_cbor.erl";
+module_source(avm_cbor_cont) -> "src/avm_cbor_cont.erl";
 module_source(avm_cbor_partial) -> "src/avm_cbor_partial.erl".
 
 summarize(Results) ->

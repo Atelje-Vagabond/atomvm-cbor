@@ -18,6 +18,8 @@ OUT = ROOT / "docs" / "api.md"
 DESCRIPTIONS = {
     "decode/1": ("Decode one CBOR item using default options.", "Reads one complete CBOR value and returns the decoded value plus trailing bytes.", "It is not a strict whole-binary decoder; use decode_all/1 for that."),
     "decode/2": ("Decode one CBOR item using explicit options.", "Applies caller-provided limits and feature flags while decoding one item.", "It does not silently ignore invalid options."),
+    "decode_start/2": ("Start a pull-based decode with explicit options.", "Returns an opaque immutable continuation without performing parser work.", "It is not a streaming-input API; the complete binary must already exist."),
+    "decode_continue/2": ("Advance a continuation by a positive work budget.", "Returns done, more, or a controlled decode error after bounded parser transitions.", "It does not sleep, yield, or schedule the next call for the caller."),
     "decode_all/1": ("Decode a complete CBOR sequence using default options.", "Consumes all CBOR items and succeeds only when no trailing data remains.", "It is not meant for incomplete stream buffers; use decode_sequence/1 for that."),
     "decode_all/2": ("Decode a complete CBOR sequence using explicit options.", "Consumes all CBOR items while applying caller-provided limits and feature flags.", "It does not accept malformed or incomplete trailing data."),
     "decode_sequence/1": ("Decode as many complete CBOR items as possible using default options.", "Returns complete items and keeps a truncated final item as Rest.", "It is not a whole-input validation helper; use decode_all/1 for that."),

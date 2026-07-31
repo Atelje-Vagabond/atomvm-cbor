@@ -54,6 +54,114 @@ wide_container_boundaries_test() ->
         avm_cbor:decode(Map, [{max_items, 5}])
     ).
 
+fixed_cost_container_boundaries_test() ->
+    ArrayPayload = binary:copy(<<0>>, 4095),
+    Array = <<16#99, 4095:16, ArrayPayload/binary>>,
+    ?assertMatch(
+        {ok, Values, <<>>} when length(Values) =:= 4095,
+        avm_cbor:decode(Array)
+    ),
+    ?assertEqual(
+        {error, {max_items_exceeded, 4095}},
+        avm_cbor:decode(Array, [{max_items, 4095}])
+    ),
+    ?assertEqual(
+        {error, {max_bytes_exceeded, 4097}},
+        avm_cbor:decode(Array, [{max_bytes, 4097}])
+    ),
+    OverArrayPayload = binary:copy(<<0>>, 4096),
+    OverArray = <<16#99, 4096:16, OverArrayPayload/binary>>,
+    ?assertEqual(
+        {error, {max_items_exceeded, 4096}},
+        avm_cbor:decode(OverArray)
+    ),
+    ?assertMatch(
+        {ok, OverValues, <<>>} when length(OverValues) =:= 4096,
+        avm_cbor:decode(OverArray, [{max_items, 4097}])
+    ),
+    TruncatedArray = <<16#99, 4095:16, (binary:copy(<<0>>, 4094))/binary>>,
+    ?assertEqual({error, truncated}, avm_cbor:decode(TruncatedArray)),
+    ?assertEqual(
+        {error, reserved_additional_info},
+        avm_cbor:decode(<<16#98, 64, 16#FC>>)
+    ),
+    Pairs = binary:copy(<<0, 0>>, 2047),
+    TaggedMap = <<16#C0, 16#B9, 2047:16, Pairs/binary>>,
+    ?assertMatch(
+        {ok, {tag, 0, {map, Values}}, <<>>} when length(Values) =:= 2047,
+        avm_cbor:decode(TaggedMap)
+    ),
+    OverPairs = binary:copy(<<0, 0>>, 2048),
+    OverTaggedMap = <<16#C0, 16#B9, 2048:16, OverPairs/binary>>,
+    ?assertEqual(
+        {error, {max_items_exceeded, 4096}},
+        avm_cbor:decode(OverTaggedMap)
+    ),
+    ?assertMatch(
+        {ok, {tag, 0, {map, Values}}, <<>>} when length(Values) =:= 2048,
+        avm_cbor:decode(OverTaggedMap, [{max_items, 4098}])
+    ),
+    ?assertEqual(
+        {error, reserved_additional_info},
+        avm_cbor:decode(<<16#B8, 64, 16#FC>>)
+    ),
+    ?assertEqual(
+        {error, unexpected_break},
+        avm_cbor:decode(<<16#B8, 64, 16#FF>>)
+    ).
+
+fixed_cost_container_fallback_test() ->
+    ?assertEqual(
+        {ok, [0, 24, -1], <<>>},
+        avm_cbor:decode(<<16#83, 0, 16#18, 24, 16#20>>)
+    ),
+    ?assertEqual(
+        {ok, [0, false, true], <<>>},
+        avm_cbor:decode(<<16#83, 0, 16#F4, 16#F5>>)
+    ),
+    ?assertEqual(
+        {error, {unsupported_simple_value, 1}},
+        avm_cbor:decode(<<16#82, 0, 16#E1>>, [{allow_simple, false}])
+    ),
+    ?assertEqual(
+        {error, reserved_additional_info},
+        avm_cbor:decode(<<16#82, 0, 16#FC>>)
+    ),
+    ?assertEqual(
+        {error, unexpected_break},
+        avm_cbor:decode(<<16#82, 0, 16#FF>>)
+    ),
+    ?assertEqual(
+        {ok, {map, [{0, 0}, {1, 24}]}, <<>>},
+        avm_cbor:decode(<<16#A2, 0, 0, 1, 16#18, 24>>)
+    ),
+    ?assertEqual(
+        {error, duplicate_map_key},
+        avm_cbor:decode(<<16#A2, 0, 0, 0, 0>>, [{deterministic, true}])
+    ),
+    ?assertEqual(
+        {ok, {map, [{0, 0}, {1, 0}]}, <<>>},
+        avm_cbor:decode(<<16#A2, 0, 0, 1, 0>>, [{deterministic, true}])
+    ).
+
+fixed_cost_container_nested_budget_test() ->
+    ?assertEqual(
+        {error, {max_items_exceeded, 3}},
+        avm_cbor:decode(<<16#82, 16#81, 0, 0>>, [{max_items, 3}])
+    ),
+    ?assertEqual(
+        {error, {max_items_exceeded, 4}},
+        avm_cbor:decode(
+            <<16#83, 16#82, 0, 0, 0, 16#40>>, [{max_items, 4}]
+        )
+    ),
+    ?assertEqual(
+        {error, {max_items_exceeded, 5}},
+        avm_cbor:decode(
+            <<16#A2, 0, 16#82, 0, 0, 0, 0>>, [{max_items, 5}]
+        )
+    ).
+
 depth_boundaries_test() ->
     DeepArrays = <<16#81, 16#81, 16#81, 1>>,
     ?assertEqual(

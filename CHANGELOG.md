@@ -11,12 +11,17 @@ First Hex.pm release of package `atomvm_cbor` and OTP application `avm_cbor`.
 - Preferred-serialization checks and output selection.
 - Global node and cumulative string-byte budgets.
 - Duplicate-map-key and encoded-key-order validation.
+- Pull-based `decode_start/2` and budgeted `decode_continue/2` with an opaque
+  explicit-frame continuation and no decoder-internal sleeps or yields.
 - Public RFC, malformed-input, resource-bound, property, coverage, AtomVM, and benchmark runners.
 
 ### Improved
 
 - Options are normalized once into fixed tuple/record state instead of repeatedly scanning recursive proplists.
 - Malformed and truncated payloads return structured errors across full and partial paths.
+- Large fixed-cost scalar containers use an independently capped native path;
+  caller-raised limits cannot enlarge its speculative allocation, and every
+  other representation retains the general bounded decoder.
 - Host workloads and three of four attached-device common paths improved against the public `v0.1.1` baseline; ESP32-S3 `decode/1` measured 2.05% slower.
 - Public term representations remain compatible with the historical API.
 

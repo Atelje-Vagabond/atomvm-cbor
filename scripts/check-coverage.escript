@@ -8,7 +8,7 @@ main([CoverData, ThresholdText, DiffPath, BranchEnvPath]) ->
     ok = ensure_directory("coverage/placeholder"),
     {ok, _Pid} = cover:start(),
     ok = cover:import(CoverData),
-    Modules = [avm_cbor, avm_cbor_partial],
+    Modules = [avm_cbor, avm_cbor_cont, avm_cbor_partial],
     ChangedLines = read_changed_lines(DiffPath),
     CriticalRanges = critical_ranges(Modules),
     Results = line_results(Modules, ChangedLines, CriticalRanges),
@@ -104,7 +104,9 @@ is_critical_line(Module, Line, Ranges) ->
 
 is_critical(Function) ->
     lists:member(Function, [
-        decode, decode_normalized, decode_all, decode_all_normalized,
+        decode, decode_start, decode_continue, decode_normalized,
+        start, continue, run, step, step_next,
+        decode_all, decode_all_normalized,
         decode_all_items, decode_all_small_items, decode_sequence,
         decode_sequence_normalized, decode_sequence_items,
         decode_sequence_small_items, normalize_opts,
@@ -262,4 +264,5 @@ passes({_Covered, 0}, _Threshold) -> false;
 passes({Covered, Total}, Threshold) -> Covered * 100 >= Total * Threshold.
 
 module_source(avm_cbor) -> "src/avm_cbor.erl";
+module_source(avm_cbor_cont) -> "src/avm_cbor_cont.erl";
 module_source(avm_cbor_partial) -> "src/avm_cbor_partial.erl".

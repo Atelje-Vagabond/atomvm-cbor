@@ -20,15 +20,15 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$REPO_DIR"
 
 echo "=== Compiling ==="
-"$ERLC" -o /tmp src/avm_cbor.erl src/avm_cbor_partial.erl
+"$ERLC" -o /tmp src/avm_cbor.erl src/avm_cbor_cont.erl src/avm_cbor_partial.erl
 "$ERLC" -o /tmp test/avm_cbor_atomvm.erl
 
 echo "=== Running under AtomVM (.beam path) ==="
-"$ATOMVM" /tmp/avm_cbor.beam /tmp/avm_cbor_partial.beam /tmp/avm_cbor_atomvm.beam "$ATOMVMLIB"
+"$ATOMVM" /tmp/avm_cbor.beam /tmp/avm_cbor_cont.beam /tmp/avm_cbor_partial.beam /tmp/avm_cbor_atomvm.beam "$ATOMVMLIB"
 
 echo "=== (optional) Creating .avm pack ==="
 if command -v packbeam &>/dev/null; then
-    packbeam create -s avm_cbor_atomvm /tmp/avm_cbor_test.avm /tmp/avm_cbor.beam /tmp/avm_cbor_partial.beam /tmp/avm_cbor_atomvm.beam
+    packbeam create -s avm_cbor_atomvm /tmp/avm_cbor_test.avm /tmp/avm_cbor.beam /tmp/avm_cbor_cont.beam /tmp/avm_cbor_partial.beam /tmp/avm_cbor_atomvm.beam
     "$ATOMVM" /tmp/avm_cbor_test.avm "$ATOMVMLIB"
     echo "=== .avm pack path also passed ==="
 else

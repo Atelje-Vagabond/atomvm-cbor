@@ -4,6 +4,7 @@
 
 -export([
     decode/1, decode/2,
+    decode_start/2, decode_continue/2,
     decode_all/1, decode_all/2,
     decode_sequence/1, decode_sequence/2,
     encode/1, encode/2,
@@ -48,6 +49,12 @@
 -type decode_result() :: {ok, term(), binary()} | {error, term()}.
 -type encode_result() :: {ok, binary()} | {error, term()}.
 
+%% Bound the speculative fixed-cost conversion independently of caller options.
+%% The default maximum flat array uses exactly 4095 direct children; larger
+%% caller-authorized containers retain the ordinary incremental decoder.
+-define(FIXED_COST_BATCH_MAX_NODES, 4095).
+-define(FIXED_COST_NATIVE_MIN_NODES, 64).
+
 %% Decode one CBOR item.
 -spec decode(term()) -> decode_result().
 decode(Bin) when is_binary(Bin), byte_size(Bin) =< 4096 ->
@@ -68,6 +75,26 @@ decode(Bin, _Opts) when is_binary(Bin) ->
     {error, invalid_options_list};
 decode(_Bin, _Opts) ->
     {error, invalid_input}.
+
+%% Start a pure pull-based decode.  The returned continuation is opaque and
+%% performs no parsing work until decode_continue/2 is called.
+-spec decode_start(term(), term()) -> {ok, term()} | {error, term()}.
+decode_start(Bin, Opts) when is_binary(Bin), is_list(Opts) ->
+    case normalize_opts(Opts) of
+        {error, _} = Err -> Err;
+        {ok, OptState} -> avm_cbor_cont:start(Bin, new_decode_state(OptState))
+    end;
+decode_start(Bin, _Opts) when is_binary(Bin) ->
+    {error, invalid_options_list};
+decode_start(_Bin, _Opts) ->
+    {error, invalid_input}.
+
+%% Continue for at most Budget explicit parser transitions.  Scheduling and
+%% pacing remain the caller's responsibility; the decoder never sleeps/yields.
+-spec decode_continue(term(), term()) ->
+    {done, term(), binary()} | {more, term()} | {error, term()}.
+decode_continue(Continuation, Budget) ->
+    avm_cbor_cont:continue(Continuation, Budget).
 
 decode_normalized(<<>>, _State) ->
     {error, empty};
@@ -96,17 +123,20 @@ encode(_Val, _Opts) ->
     {error, invalid_options_list}.
 
 encode_normalized(Val, State) ->
-    case (catch do_encode(Val, State, 0)) of
+    try do_encode(Val, State, 0) of
         Bin when is_binary(Bin) ->
             case check_max_bytes(byte_size(Bin), State) of
                 ok -> {ok, Bin};
                 {error, _} = Err -> Err
-            end;
-        {'EXIT', {function_clause, _}} ->
+            end
+    catch
+        error:function_clause ->
             {error, {unsupported_value, Val}};
-        {'EXIT', {{encode_error, Reason}, _}} ->
+        error:{encode_error, Reason} ->
             {error, Reason};
-        {'EXIT', Reason} ->
+        error:Reason:Stacktrace ->
+            {error, {Reason, Stacktrace}};
+        exit:Reason ->
             {error, Reason}
     end.
 
@@ -673,10 +703,45 @@ array(N, Bin, State, Depth) when N > 0 ->
             end
     end.
 
-items(0, Bin, State, _Depth, Acc) -> {ok, lists:reverse(Acc), Bin, State};
-items(N, Bin, State, Depth, Acc) ->
+items(N, Bin, State, Depth, []) ->
+    case fixed_unsigned_items(N, Bin) of
+        {ok, Values, Rest} ->
+            case consume_nodes(N, State) of
+                {ok, State1} -> {ok, Values, Rest, State1};
+                {error, _} = Err -> Err
+            end;
+        fallback ->
+            items_general(N, Bin, State, Depth, [])
+    end.
+
+%% erlang:binary_to_list/1 is a native BIF on the pinned AtomVM runtime.  The
+%% declaration checks have already bounded N and proved N available bytes.
+%% Convert only that bounded prefix, then prove every resulting byte represents
+%% a complete preferred unsigned integer before accepting the list as decoded
+%% values.  Any mismatch discards the bounded candidate and uses the full path.
+fixed_unsigned_items(N, Bin)
+  when N >= ?FIXED_COST_NATIVE_MIN_NODES,
+       N =< ?FIXED_COST_BATCH_MAX_NODES,
+       N =< byte_size(Bin) ->
+    <<Candidate:N/binary, Rest/binary>> = Bin,
+    Values = erlang:binary_to_list(Candidate),
+    case all_fixed_unsigned(Values) of
+        true -> {ok, Values, Rest};
+        false -> fallback
+    end;
+fixed_unsigned_items(_N, _Bin) -> fallback.
+
+all_fixed_unsigned([]) -> true;
+all_fixed_unsigned([Value | Rest]) when Value < 24 ->
+    all_fixed_unsigned(Rest);
+all_fixed_unsigned(_Values) -> false.
+
+items_general(0, Bin, State, _Depth, Acc) ->
+    {ok, lists:reverse(Acc), Bin, State};
+items_general(N, Bin, State, Depth, Acc) ->
     case decode_item(Bin, State, Depth) of
-        {ok, Item, Rest, State1} -> items(N - 1, Rest, State1, Depth, [Item | Acc]);
+        {ok, Item, Rest, State1} ->
+            items_general(N - 1, Rest, State1, Depth, [Item | Acc]);
         {error, _} = Err -> Err
     end.
 
@@ -696,14 +761,43 @@ map(N, Bin, State, Depth) when N > 0 ->
             end
     end.
 
-pairs(0, Bin, State, _Depth, Acc) ->
+pairs(N, Bin, State, Depth, []) ->
+    case fixed_unsigned_pairs(N, Bin) of
+        {ok, Values, Rest} ->
+            case consume_nodes(N * 2, State) of
+                {ok, State1} -> {ok, {map, Values}, Rest, State1};
+                {error, _} = Err -> Err
+            end;
+        fallback ->
+            pairs_general(N, Bin, State, Depth, [])
+    end.
+
+fixed_unsigned_pairs(N, Bin)
+  when N * 2 >= ?FIXED_COST_NATIVE_MIN_NODES,
+       N * 2 =< ?FIXED_COST_BATCH_MAX_NODES,
+       N * 2 =< byte_size(Bin) ->
+    Needed = N * 2,
+    <<Candidate:Needed/binary, Rest/binary>> = Bin,
+    Bytes = erlang:binary_to_list(Candidate),
+    case all_fixed_unsigned(Bytes) of
+        true -> {ok, fixed_unsigned_pair_values(Bytes, []), Rest};
+        false -> fallback
+    end;
+fixed_unsigned_pairs(_N, _Bin) -> fallback.
+
+fixed_unsigned_pair_values([], Acc) -> lists:reverse(Acc);
+fixed_unsigned_pair_values([Key, Value | Rest], Acc) ->
+    fixed_unsigned_pair_values(Rest, [{Key, Value} | Acc]).
+
+pairs_general(0, Bin, State, _Depth, Acc) ->
     {ok, {map, lists:reverse(Acc)}, Bin, State};
-pairs(N, Bin, State, Depth, Acc) ->
+pairs_general(N, Bin, State, Depth, Acc) ->
     case decode_item(Bin, State, Depth) of
         {ok, Key, Rest1, State1} ->
             case decode_item(Rest1, State1, Depth) of
                 {ok, Val, Rest2, State2} ->
-                    pairs(N - 1, Rest2, State2, Depth, [{Key, Val} | Acc]);
+                    pairs_general(N - 1, Rest2, State2, Depth,
+                                  [{Key, Val} | Acc]);
                 {error, _} = Err -> Err
             end;
         {error, _} = Err -> Err

@@ -29,7 +29,7 @@ docker run --rm \
         test "$(git -C /atomvm rev-parse HEAD)" = "${ATOMVM_COMMIT}"
         apt-get update -qq
         apt-get install -y -qq erlang-base
-        erlc -o /tmp /project/src/avm_cbor.erl /project/src/avm_cbor_partial.erl
+        erlc -o /tmp /project/src/avm_cbor.erl /project/src/avm_cbor_cont.erl /project/src/avm_cbor_partial.erl
         . "${IDF_PATH}/export.sh"
         cd /atomvm/src/platforms/esp32
         idf.py reconfigure

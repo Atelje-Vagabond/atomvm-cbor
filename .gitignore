@@ -24,6 +24,7 @@ ebin/
 coverage/
 bench/results/
 docs/benchmarks/0.2.0-local.md
+docs/benchmarks/*--*-local.md
 __pycache__/
 *.pyc
 rebar.lock

@@ -10,9 +10,9 @@ package_dir="$1"
 test -d "${package_dir}"
 
 for required in \
-    src/avm_cbor.erl src/avm_cbor_partial.erl src/avm_cbor_opts.hrl \
+    src/avm_cbor.erl src/avm_cbor_cont.erl src/avm_cbor_partial.erl src/avm_cbor_opts.hrl \
     src/avm_cbor.app.src rebar.config VERSION README.md CHANGELOG.md \
-    LICENSE docs/api.md; do
+    LICENSE docs/api.md docs/decoder-policy.md docs/atomvm-memory-internals.md; do
     test -s "${package_dir}/${required}"
 done
 
@@ -26,10 +26,13 @@ LICENSE
 README.md
 VERSION
 docs/api.md
+docs/atomvm-memory-internals.md
+docs/decoder-policy.md
 hex_metadata.config
 rebar.config
 src/avm_cbor.app.src
 src/avm_cbor.erl
+src/avm_cbor_cont.erl
 src/avm_cbor_opts.hrl
 src/avm_cbor_partial.erl
 FILES

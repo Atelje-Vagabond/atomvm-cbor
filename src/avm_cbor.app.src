@@ -2,7 +2,7 @@
     {description, "Compact RFC 8949 CBOR encoder/decoder for AtomVM and constrained Erlang runtimes."},
     {vsn, "0.2.0"},
     {pkg_name, atomvm_cbor},
-    {modules, [avm_cbor, avm_cbor_partial]},
+    {modules, [avm_cbor, avm_cbor_cont, avm_cbor_partial]},
     {registered, []},
     {applications, [kernel, stdlib]},
     {env, []},
@@ -17,6 +17,8 @@
         "README.md",
         "CHANGELOG.md",
         "LICENSE",
-        "docs/api.md"
+        "docs/api.md",
+        "docs/decoder-policy.md",
+        "docs/atomvm-memory-internals.md"
     ]}
 ]}.

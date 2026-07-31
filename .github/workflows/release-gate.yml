@@ -61,6 +61,7 @@ jobs:
 
   otp:
     name: OTP ${{ matrix.otp }}
+    needs: performance
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 20
     strategy:
@@ -91,6 +92,7 @@ jobs:
 
   coverage:
     name: Coverage (95% line and branch)
+    needs: performance
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 20
     steps:
@@ -120,11 +122,12 @@ jobs:
           else
             base="HEAD"
           fi
-          git diff --output=coverage/changed.diff --unified=0 "${base}" -- src/avm_cbor.erl src/avm_cbor_partial.erl
+          git diff --output=coverage/changed.diff --unified=0 "${base}" -- src/avm_cbor.erl src/avm_cbor_cont.erl src/avm_cbor_partial.erl
           COVERAGE_DIFF_FILE=coverage/changed.diff bash scripts/coverage-gate.sh
 
   performance:
-    name: v0.1.1 performance gate
+    name: Previous SemVer performance gate
+    needs: hygiene
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 20
     steps:
@@ -140,8 +143,10 @@ jobs:
         with:
           otp-version: "29"
       - name: Prove fail-closed threshold behavior
-        run: bash scripts/test-benchmark-regression-gate.sh
-      - name: Compare exact historical baseline
+        run: |
+          bash scripts/test-benchmark-regression-gate.sh
+          bash scripts/test-semver-baseline-selector.sh
+      - name: Select and compare exact reachable SemVer baseline
         env:
           BENCHMARK_NOISE_TOLERANCE_PERCENT: "5"
           BENCHMARK_RUNS: "5"
@@ -152,6 +157,7 @@ jobs:
 
   atomvm:
     name: AtomVM 0.6.6
+    needs: performance
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 15
     steps:
@@ -178,6 +184,7 @@ jobs:
 
   esp-idf:
     name: ESP-IDF ${{ matrix.idf }}
+    needs: performance
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 35
     strategy:
@@ -196,6 +203,7 @@ jobs:
 
   package:
     name: Hex package, docs, and consumers
+    needs: performance
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 25
     steps:

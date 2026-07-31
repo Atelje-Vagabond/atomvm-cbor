@@ -36,6 +36,24 @@ internal_contract_boundaries_test() ->
     ),
     ?assertError(function_clause, avm_cbor:array(-1, <<>>, State, 0)),
     ?assertError(function_clause, avm_cbor:map(-1, <<>>, State, 0)),
+    ?assertMatch(
+        {ok, [seed, 1], <<>>, #cbor_decode_state{nodes_left = 63}},
+        avm_cbor:items_general(1, <<1>>, State, 0, [seed])
+    ),
+    ?assertMatch(
+        {ok, {map, [{seed, seed}, {1, 2}]}, <<>>,
+         #cbor_decode_state{nodes_left = 62}},
+        avm_cbor:pairs_general(1, <<1, 2>>, State, 0, [{seed, seed}])
+    ),
+    EmptyState = setelement(3, State, 0),
+    ?assertEqual(
+        {error, {max_items_exceeded, 64}},
+        avm_cbor:items(64, binary:copy(<<0>>, 64), EmptyState, 0, [])
+    ),
+    ?assertEqual(
+        {error, {max_items_exceeded, 64}},
+        avm_cbor:pairs(32, binary:copy(<<0, 0>>, 32), EmptyState, 0, [])
+    ),
     ?assertError(function_clause, avm_cbor_partial:measure_array(-1, <<>>, State, 0)),
     ?assertError(function_clause, avm_cbor_partial:measure_map(-1, <<>>, State, 0)),
     ?assertEqual({error, reserved_additional_info}, avm_cbor:arg(31, <<>>)),

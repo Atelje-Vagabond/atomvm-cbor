@@ -13,6 +13,10 @@ arbitrary_terms_never_throw_test() ->
     rand:seed(exsplus, ?SEED),
     run_random_terms(1000, ?SEED).
 
+continuation_matches_decode_property_test() ->
+    rand:seed(exsplus, ?SEED),
+    run_random_continuations(2000, ?SEED).
+
 truncation_property_test() ->
     Terms = [
         [1, 2, 3],
@@ -124,6 +128,20 @@ run_random_binaries(Count, Seed) ->
     assert_no_binary_exception(partial_decode, fun avm_cbor:partial_decode/1, Bin, Seed),
     run_random_binaries(Count - 1, Seed).
 
+run_random_continuations(0, _Seed) -> ok;
+run_random_continuations(Count, Seed) ->
+    Bin = random_binary(128),
+    Expected = case avm_cbor:decode(Bin, []) of
+        {ok, Value, Rest} -> {done, Value, Rest};
+        {error, _} = Err -> Err
+    end,
+    Actual = continue_binary(Bin, 3, 2048),
+    case Actual =:= Expected of
+        true -> run_random_continuations(Count - 1, Seed);
+        false -> erlang:error({property_failure, continuation_matches_decode,
+                               Seed, Bin, {Expected, Actual}})
+    end.
+
 run_random_terms(0, _Seed) -> ok;
 run_random_terms(Count, Seed) ->
     Input = random_term(3),
@@ -144,6 +162,12 @@ run_random_terms(Count, Seed) ->
                              fun avm_cbor:partial_decode/1, Input, Seed),
     assert_no_term_exception(partial_decode_2,
                              fun(Value) -> avm_cbor:partial_decode(Value, Opts) end,
+                             {Input, Opts}, Seed),
+    assert_no_term_exception(decode_start,
+                             fun(Value) -> avm_cbor:decode_start(Value, Opts) end,
+                             {Input, Opts}, Seed),
+    assert_no_term_exception(decode_continue,
+                             fun(Value) -> avm_cbor:decode_continue(Value, Opts) end,
                              {Input, Opts}, Seed),
     PartialAccessors = [
         {partial_value_bytes, fun avm_cbor:partial_value_bytes/1},
@@ -172,7 +196,8 @@ assert_no_binary_exception(Name, Fun, Bin, Seed) ->
 assert_no_term_exception(Name, Fun, Input, Seed) ->
     TestInput = case Input of
         {Value, _Options} when Name =:= decode_2; Name =:= decode_all_2;
-                              Name =:= decode_sequence_2; Name =:= partial_decode_2 -> Value;
+                              Name =:= decode_sequence_2; Name =:= partial_decode_2;
+                              Name =:= decode_start; Name =:= decode_continue -> Value;
         _ -> Input
     end,
     try Fun(TestInput) of
@@ -183,7 +208,9 @@ assert_no_term_exception(Name, Fun, Input, Seed) ->
             Payload = case Input of
                 {_Value, Options} when Name =:= decode_2; Name =:= decode_all_2;
                                        Name =:= decode_sequence_2;
-                                       Name =:= partial_decode_2 -> {Minimized, Options};
+                                       Name =:= partial_decode_2;
+                                       Name =:= decode_start;
+                                       Name =:= decode_continue -> {Minimized, Options};
                 _ -> Minimized
             end,
             erlang:error({property_failure, Name, Seed, Payload, {Class, Reason}})
@@ -210,6 +237,19 @@ assert_deterministic_stable(Term, Seed) ->
             Minimized = minimize_failing_term(Term, Throwing),
             erlang:error({property_failure, deterministic_encoding_is_stable,
                           Seed, Minimized, {ReportClass, ReportReason}})
+    end.
+
+continue_binary(Bin, Budget, Remaining) ->
+    case avm_cbor:decode_start(Bin, []) of
+        {ok, Continuation} -> continue_state(Continuation, Budget, Remaining);
+        {error, _} = Err -> Err
+    end.
+
+continue_state(_Continuation, _Budget, 0) -> continuation_step_limit;
+continue_state(Continuation, Budget, Remaining) ->
+    case avm_cbor:decode_continue(Continuation, Budget) of
+        {more, Next} -> continue_state(Next, Budget, Remaining - 1);
+        Result -> Result
     end.
 
 minimize_binary(Bin, Fun) -> minimize_binary(Bin, Fun, 0).

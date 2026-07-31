@@ -14,6 +14,8 @@ python3 scripts/gen-api-docs.py
 |---|---|
 | `decode/1` | Decode one CBOR item using default options. |
 | `decode/2` | Decode one CBOR item using explicit options. |
+| `decode_start/2` | Start a pull-based decode with explicit options. |
+| `decode_continue/2` | Advance a continuation by a positive work budget. |
 | `decode_all/1` | Decode a complete CBOR sequence using default options. |
 | `decode_all/2` | Decode a complete CBOR sequence using explicit options. |
 | `decode_sequence/1` | Decode as many complete CBOR items as possible using default options. |
@@ -78,6 +80,42 @@ Applies caller-provided limits and feature flags while decoding one item.
 **What it is not**
 
 It does not silently ignore invalid options.
+
+### `decode_start/2`
+
+Start a pull-based decode with explicit options.
+
+**Spec**
+
+```erlang
+decode_start(term(), term()) -> {ok, term()} | {error, term()}
+```
+
+**What it does**
+
+Returns an opaque immutable continuation without performing parser work.
+
+**What it is not**
+
+It is not a streaming-input API; the complete binary must already exist.
+
+### `decode_continue/2`
+
+Advance a continuation by a positive work budget.
+
+**Spec**
+
+```erlang
+decode_continue(term(), term()) -> {done, term(), binary()} | {more, term()} | {error, term()}
+```
+
+**What it does**
+
+Returns done, more, or a controlled decode error after bounded parser transitions.
+
+**What it is not**
+
+It does not sleep, yield, or schedule the next call for the caller.
 
 ### `decode_all/1`
 
