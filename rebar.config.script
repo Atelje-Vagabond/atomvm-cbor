@@ -1,0 +1,20 @@
+BenchmarkReports = [
+    Report
+    || Report <- filelib:wildcard("docs/benchmarks/*.md"),
+       re:run(
+           filename:basename(Report),
+           "^v?[0-9]+\\.[0-9]+\\.[0-9]+\\.md$",
+           [{capture, none}]
+       ) =:= match
+],
+ExDoc0 = proplists:get_value(ex_doc, CONFIG, []),
+Extras0 = proplists:get_value(extras, ExDoc0, []),
+Extras1 = lists:append([
+    case Extra of
+        {"docs/benchmarks.md", _} -> [Extra | BenchmarkReports];
+        _ -> [Extra]
+    end
+    || Extra <- Extras0
+]),
+ExDoc1 = lists:keystore(extras, 1, ExDoc0, {extras, Extras1}),
+lists:keystore(ex_doc, 1, CONFIG, {ex_doc, ExDoc1}).
