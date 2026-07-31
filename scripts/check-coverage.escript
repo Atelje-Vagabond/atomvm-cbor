@@ -17,7 +17,7 @@ main([CoverData, ThresholdText, DiffPath, BranchEnvPath]) ->
     Critical = metric(Results, fun(_Changed, IsCritical) -> IsCritical end),
     Branches = read_env(BranchEnvPath),
     print_metric("Line coverage", Total),
-    print_metric("Changed-line coverage", Changed),
+    print_changed_metric("Changed-line coverage", Changed),
     print_metric("Critical-path line coverage", Critical),
     ok = write_lines_json(Total, Changed, Critical, Results, Threshold),
     ok = write_uncovered(Results),
@@ -240,22 +240,30 @@ write_summary(Total, Changed, Critical, Branches, Threshold) ->
 print_metric(Label, {Covered, Total}) ->
     io:format("~s: ~.2f% (~B/~B)~n", [Label, percentage(Covered, Total), Covered, Total]).
 
+print_changed_metric(Label, {_Covered, 0}) ->
+    io:format("~s: N/A (0/0; no changed executable lines)~n", [Label]);
+print_changed_metric(Label, Metric) ->
+    print_metric(Label, Metric).
+
 enforce(Total, Changed, Critical, Threshold) ->
-    case passes(Total, Threshold) andalso passes(Changed, Threshold) andalso
+    case passes(Total, Threshold) andalso passes_if_present(Changed, Threshold) andalso
          passes(Critical, 100) of
         true ->
             io:format(
-                "Line gate passed: total and changed >= ~B%; critical = 100%.~n",
-                [Threshold]
+                "Line gate passed: total >= ~B%; changed >= ~B% when present; critical = 100%.~n",
+                [Threshold, Threshold]
             );
         false ->
             io:format(
                 standard_error,
-                "Line gate failed: total and changed must be >= ~B%; critical must be 100%.~n",
-                [Threshold]
+                "Line gate failed: total must be >= ~B%; changed must be >= ~B% when present; critical must be 100%.~n",
+                [Threshold, Threshold]
             ),
             halt(1)
     end.
+
+passes_if_present({_Covered, 0}, _Threshold) -> true;
+passes_if_present(Metric, Threshold) -> passes(Metric, Threshold).
 
 percentage(_Covered, 0) -> 0.0;
 percentage(Covered, Total) -> Covered * 100.0 / Total.

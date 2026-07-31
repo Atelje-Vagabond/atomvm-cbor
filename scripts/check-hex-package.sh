@@ -9,10 +9,22 @@ fi
 package_dir="$1"
 test -d "${package_dir}"
 
+benchmark_reports=()
+for candidate in docs/benchmarks/*.md; do
+    if [[ "$(basename "${candidate}")" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+\.md$ ]]; then
+        benchmark_reports+=("${candidate}")
+    fi
+done
+if [ "${#benchmark_reports[@]}" -eq 0 ]; then
+    echo 'FAIL: no canonical versioned benchmark reports found.' >&2
+    exit 1
+fi
+
 for required in \
     src/avm_cbor.erl src/avm_cbor_cont.erl src/avm_cbor_partial.erl src/avm_cbor_opts.hrl \
     src/avm_cbor.app.src rebar.config VERSION README.md CHANGELOG.md \
-    LICENSE docs/api.md docs/decoder-policy.md docs/atomvm-memory-internals.md; do
+    LICENSE docs/api.md docs/decoder-policy.md docs/atomvm-memory-internals.md \
+    docs/benchmarks.md "${benchmark_reports[@]}"; do
     test -s "${package_dir}/${required}"
 done
 
@@ -27,6 +39,7 @@ README.md
 VERSION
 docs/api.md
 docs/atomvm-memory-internals.md
+docs/benchmarks.md
 docs/decoder-policy.md
 hex_metadata.config
 rebar.config
@@ -36,6 +49,10 @@ src/avm_cbor_cont.erl
 src/avm_cbor_opts.hrl
 src/avm_cbor_partial.erl
 FILES
+for benchmark_report in "${benchmark_reports[@]}"; do
+    printf '%s\n' "${benchmark_report}" >> "${expected}"
+done
+sort -o "${expected}" "${expected}"
 if ! diff -u "${expected}" "${actual}"; then
     echo 'FAIL: Hex package file list differs from the allowlist.' >&2
     exit 1

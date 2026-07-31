@@ -12,8 +12,17 @@ grep -Fq '{pkg_name, atomvm_cbor}' src/avm_cbor.app.src
 grep -Fq '{licenses, ["MIT"]}' src/avm_cbor.app.src
 grep -Fq 'https://github.com/Atelje-Vagabond/atomvm-cbor' src/avm_cbor.app.src
 grep -Fq '{prefix_ref_vsn_with_v, false}' rebar.config
+grep -Fq '{"docs/benchmarks.md", #{title => "Benchmark Methodology"}}' rebar.config
+grep -Fq 'filelib:wildcard("docs/benchmarks/*.md")' rebar.config.script
+grep -Fq '"^v?[0-9]+\\.[0-9]+\\.[0-9]+\\.md$"' rebar.config.script
 grep -Fq "# atomvm-cbor ${version}" "${release_notes}"
 grep -Fq "## ${version}" CHANGELOG.md
+grep -Fq "](../../blob/${version}/docs/benchmarks/${version}.md)" "${release_notes}"
+
+if grep -Fq '](../../docs/' "${release_notes}"; then
+    echo 'FAIL: release-note repository links must include the immutable tag path.' >&2
+    exit 1
+fi
 
 if grep -RInF "v${version}" \
     README.md CHANGELOG.md VERSION src docs scripts .github \
@@ -165,7 +174,8 @@ print("Release workflow routing, order, and unchanged 5 percent threshold passed
 PY
 
 for required in \
-    README.md CHANGELOG.md LICENSE VERSION rebar.config docs/api.md \
+    README.md CHANGELOG.md LICENSE VERSION rebar.config rebar.config.script docs/api.md \
+    docs/benchmarks.md docs/benchmarks/*.md \
     src/avm_cbor.app.src "${release_notes}"; do
     test -s "${required}"
 done

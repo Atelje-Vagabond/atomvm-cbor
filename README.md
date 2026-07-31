@@ -40,6 +40,48 @@ Mix projects use:
 - Structured errors for malformed, truncated, unsupported, and resource-bound inputs.
 - OTP 25+ and AtomVM 0.6.6 compatibility.
 
+## Attached-device benchmarks
+
+Lower timings are better. The common encode/decode results compare the exact
+public `v0.1.1` baseline with `0.2.0` using the same CBOR payload and AtomVM
+0.6.6 harness on each device. See the [benchmark methodology](docs/benchmarks.md)
+and the [full 0.2.0 validation report](docs/benchmarks/0.2.0.md) for complete
+provenance, hardware details, soak results, and reproduction guidance.
+
+| Board | Function | v0.1.1 µs | 0.2.0 µs | Change |
+|---|---:|---:|---:|---:|
+| ESP32-S3 (8 MB PSRAM) | `encode/1` | 8705.82 | 7120.54 | 18.21% faster |
+| ESP32-S3 (8 MB PSRAM) | `decode/1` | 8508.98 | 8683.68 | 2.05% slower |
+| RP2040 (16 MB flash) | `encode/1` | 7248.56 | 5118.92 | 29.38% faster |
+| RP2040 (16 MB flash) | `decode/1` | 7105.50 | 6400.78 | 9.92% faster |
+| WaveShare ESP32-S3-DEV-KIT-N32R16V | `encode/1` | 6080.32 | 4064.56 | 33.15% faster |
+| WaveShare ESP32-S3-DEV-KIT-N32R16V | `decode/1` | 5853.32 | 4600.30 | 21.41% faster |
+
+The partial/deferred APIs are new in `0.2.0`, so no `v0.1.1` measurements
+exist for them.
+
+| Function | ESP32-S3 0.2.0 µs | RP2040 0.2.0 µs | WaveShare N32R16V 0.2.0 µs |
+|---|---:|---:|---:|
+| `partial_decode/1` | 13109.00 | 9875.48 | 7518.24 |
+| `partial_decode/2` | 13326.80 | 9928.18 | 7570.60 |
+| `partial_deep_decode/1` | 10805.88 | 8243.96 | 5911.32 |
+| `partial_value_bytes/1` | 767.53 | 579.66 | 562.63 |
+| `partial_contents/1` | 959.06 | 506.69 | 607.53 |
+| `partial_skip/1` | 380.07 | 228.66 | 295.30 |
+| `partial_type/1` | 382.08 | 229.65 | 295.48 |
+| `partial_count/1` | 381.27 | 229.65 | 296.33 |
+| `partial_tag/1` | 438.55 | 253.83 | 360.91 |
+| `partial_size/1` | 455.71 | 260.95 | 382.75 |
+| `partial_offset/1` | 379.89 | 227.56 | 296.28 |
+| `partial_length/1` | 382.62 | 234.45 | 295.84 |
+
+The older ESP32-S3 `decode/1` regression is measured and reproducible. It is
+accepted under the unchanged 5% release threshold because `0.2.0` retains the
+new fail-closed node and string-byte accounting on this general decode path.
+The same workload improves on RP2040 and WaveShare, so no single hardware or
+security-check cause is claimed. The full report includes the complete
+technical interpretation and maximum-bound testing.
+
 ## Public term representation
 
 | CBOR value | Erlang value |

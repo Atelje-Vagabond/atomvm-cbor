@@ -39,6 +39,12 @@ for key in performance otp coverage atomvm esp_idf package; do
     assert_route "${public_workflow}" "${key}" false
 done
 
+public_coverage="$(route public scripts/branch-coverage.escript scripts/check-coverage.escript)"
+assert_route "${public_coverage}" coverage true
+for key in performance otp atomvm esp_idf package; do
+    assert_route "${public_coverage}" "${key}" false
+done
+
 public_unknown_script="$(route public scripts/new-release-operation.sh)"
 for key in performance otp coverage atomvm esp_idf package; do
     assert_route "${public_unknown_script}" "${key}" true

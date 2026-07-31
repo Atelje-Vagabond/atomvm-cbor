@@ -19,6 +19,8 @@
         "LICENSE",
         "docs/api.md",
         "docs/decoder-policy.md",
-        "docs/atomvm-memory-internals.md"
+        "docs/atomvm-memory-internals.md",
+        "docs/benchmarks.md",
+        "docs/benchmarks"
     ]}
 ]}.
