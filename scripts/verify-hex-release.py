@@ -3,13 +3,13 @@
 
 import argparse
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
 
 PACKAGE = "atomvm_cbor"
 APP = "avm_cbor"
-VERSION = "0.2.0"
 ORGANIZATION = "ateljevagabond"
 API = f"https://hex.pm/api/packages/{PACKAGE}"
 
@@ -27,16 +27,21 @@ def fetch(url):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("state", choices=["absent", "published"])
+    parser.add_argument("--version", required=True)
     parser.add_argument("--checksum")
     args = parser.parse_args()
+    if not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", args.version):
+        raise SystemExit("--version must be a stable SemVer")
+    version = args.version
 
-    status, package = fetch(API)
     if args.state == "absent":
-        if status != 404:
-            raise SystemExit("atomvm_cbor already exists on public Hex")
+        release_status, _release = fetch(f"{API}/releases/{version}")
+        if release_status != 404:
+            raise SystemExit(f"atomvm_cbor {version} already exists on public Hex")
         print("HEX_RELEASE_ABSENT")
         return
 
+    status, package = fetch(API)
     if status != 200:
         raise SystemExit("published package is not visible through the public Hex API")
     if package.get("repository") != "hexpm":
@@ -45,13 +50,13 @@ def main():
     if ORGANIZATION not in owners:
         raise SystemExit("public Hex API does not show the expected organization owner")
 
-    release_status, release = fetch(f"{API}/releases/{VERSION}")
+    release_status, release = fetch(f"{API}/releases/{version}")
     if release_status != 200:
-        raise SystemExit("release 0.2.0 is not visible through the public Hex API")
-    if release.get("version") != VERSION or release.get("meta", {}).get("app") != APP:
+        raise SystemExit(f"release {version} is not visible through the public Hex API")
+    if release.get("version") != version or release.get("meta", {}).get("app") != APP:
         raise SystemExit("published release identity does not match app/version")
     if not release.get("has_docs"):
-        raise SystemExit("HexDocs is not published for 0.2.0")
+        raise SystemExit(f"HexDocs is not published for {version}")
     if args.checksum and release.get("checksum") != args.checksum:
         raise SystemExit("published Hex checksum differs from the locally built package")
 

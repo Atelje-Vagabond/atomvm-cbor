@@ -4,23 +4,27 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repo_root}"
 
-version="$(tr -d '\r\n' < VERSION)"
-test "${version}" = "0.2.0"
+version="$(python3 scripts/read-release-version.py)"
+release_notes=".github/releases/${version}.md"
 
-grep -Fq '{vsn, "0.2.0"}' src/avm_cbor.app.src
+grep -Fq "{vsn, \"${version}\"}" src/avm_cbor.app.src
 grep -Fq '{pkg_name, atomvm_cbor}' src/avm_cbor.app.src
 grep -Fq '{licenses, ["MIT"]}' src/avm_cbor.app.src
 grep -Fq 'https://github.com/Atelje-Vagabond/atomvm-cbor' src/avm_cbor.app.src
 grep -Fq '{prefix_ref_vsn_with_v, false}' rebar.config
-grep -Fq '# atomvm-cbor 0.2.0' .github/releases/0.2.0.md
-grep -Fq '## 0.2.0' CHANGELOG.md
+grep -Fq "# atomvm-cbor ${version}" "${release_notes}"
+grep -Fq "## ${version}" CHANGELOG.md
 
-if grep -RInF 'v0.2.0' \
+if grep -RInF "v${version}" \
     README.md CHANGELOG.md VERSION src docs scripts .github \
     --exclude='source-integrity.sha256' \
-    --exclude='check-release-metadata.sh' \
-    --exclude='publish-hex.yml'; then
-    echo 'FAIL: new release surfaces must use 0.2.0 without a v prefix.' >&2
+    --exclude='check-release-metadata.sh'; then
+    echo "FAIL: new release surfaces must use ${version} without a v prefix." >&2
+    exit 1
+fi
+
+if grep -RInF "${version}" .github/workflows; then
+    echo 'FAIL: workflows must derive the release version from VERSION.' >&2
     exit 1
 fi
 
@@ -62,7 +66,7 @@ PY
 
 for required in \
     README.md CHANGELOG.md LICENSE VERSION rebar.config docs/api.md \
-    src/avm_cbor.app.src .github/releases/0.2.0.md; do
+    src/avm_cbor.app.src "${release_notes}"; do
     test -s "${required}"
 done
 

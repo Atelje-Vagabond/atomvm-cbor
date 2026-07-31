@@ -6,7 +6,7 @@ on:
     branches:
       - main
     tags:
-      - "0.2.0"
+      - "**"
   workflow_dispatch:
 
 permissions:
@@ -32,6 +32,16 @@ jobs:
           fetch-depth: 0
       - name: Assert exact checkout
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Read and validate release version
+        run: |
+          set -euo pipefail
+          release_version="$(python3 scripts/read-release-version.py)"
+          printf 'RELEASE_VERSION=%s\n' "${release_version}" >> "${GITHUB_ENV}"
+          printf 'Validated VERSION: %s\n' "${release_version}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            test "${GITHUB_REF}" = "refs/tags/${release_version}"
+            test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/${release_version}^{}")"
+          fi
       - name: Require signed-off pull-request commits
         if: github.event_name == 'pull_request'
         env:
@@ -213,6 +223,12 @@ jobs:
           ref: ${{ env.EXPECTED_SHA }}
       - name: Assert exact checkout
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - name: Read and validate release version
+        run: |
+          set -euo pipefail
+          release_version="$(python3 scripts/read-release-version.py)"
+          printf 'RELEASE_VERSION=%s\n' "${release_version}" >> "${GITHUB_ENV}"
+          printf 'Validated VERSION: %s\n' "${release_version}"
       - name: Install Erlang, Elixir, and Rebar3
         uses: erlef/setup-beam@v1.24.1
         with:
@@ -228,7 +244,11 @@ jobs:
           test -n "${index}"
           docs_dir="$(dirname "${index}")"
           grep -RFl 'github.com/Atelje-Vagabond/atomvm-cbor' "${docs_dir}" >/dev/null
-          grep -REl '/(blob|tree)/0\.2\.0/' "${docs_dir}" >/dev/null
+          if ! grep -RFl "/blob/${RELEASE_VERSION}/" "${docs_dir}" >/dev/null && \
+             ! grep -RFl "/tree/${RELEASE_VERSION}/" "${docs_dir}" >/dev/null; then
+            echo "generated docs do not link to release ${RELEASE_VERSION}" >&2
+            exit 1
+          fi
           echo "DOCS_DIR=${docs_dir}" >> "${GITHUB_ENV}"
       - name: Build and dry-run package
         env:
@@ -238,14 +258,15 @@ jobs:
           rebar3 hex build
           rebar3 hex build --unpack
           rebar3 hex publish --repo hexpm --dry-run --yes
-          package_dir="$(find _build -type d -name 'atomvm_cbor-0.2.0' -print -quit)"
+          package_dir="$(find _build -type d -name "atomvm_cbor-${RELEASE_VERSION}" -print -quit)"
           test -n "${package_dir}"
           bash scripts/check-hex-package.sh "${package_dir}"
-          package_tar="$(find _build -type f -name 'atomvm_cbor-0.2.0.tar' -print -quit)"
+          package_tar="$(find _build -type f -name "atomvm_cbor-${RELEASE_VERSION}.tar" -print -quit)"
           test -n "${package_tar}"
           test "$(stat -c %s "${package_tar}")" -le 262144
-          tar -czf /tmp/atomvm_cbor-0.2.0-docs.tar.gz -C "${DOCS_DIR}" .
-          test "$(stat -c %s /tmp/atomvm_cbor-0.2.0-docs.tar.gz)" -le 524288
+          docs_tar="/tmp/atomvm_cbor-${RELEASE_VERSION}-docs.tar.gz"
+          tar -czf "${docs_tar}" -C "${DOCS_DIR}" .
+          test "$(stat -c %s "${docs_tar}")" -le 524288
           test "$(du -sb "${DOCS_DIR}" | cut -f1)" -le 2097152
           test "$(du -sb "${package_dir}" | cut -f1)" -le 1048576
           echo "PACKAGE_DIR=${package_dir}" >> "${GITHUB_ENV}"
@@ -255,7 +276,7 @@ jobs:
           consumer="$(mktemp -d)"
           mkdir -p "${consumer}/src" "${consumer}/_checkouts"
           cp -a "${PACKAGE_DIR}" "${consumer}/_checkouts/avm_cbor"
-          printf '{erl_opts, [debug_info]}.\n{deps, [{avm_cbor, "~> 0.2.0", {pkg, atomvm_cbor}}]}.\n' > "${consumer}/rebar.config"
+          printf '{erl_opts, [debug_info]}.\n{deps, [{avm_cbor, "~> %s", {pkg, atomvm_cbor}}]}.\n' "${RELEASE_VERSION}" > "${consumer}/rebar.config"
           printf '{application, rebar_consumer, [{vsn, "0.0.0"}, {modules, [rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/rebar_consumer.app.src"
           printf -- '-module(rebar_consumer).\n-export([run/0]).\nrun() -> avm_cbor:decode(<<1>>).\n' > "${consumer}/src/rebar_consumer.erl"
           (cd "${consumer}" && rebar3 compile)
