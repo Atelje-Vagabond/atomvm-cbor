@@ -2,8 +2,7 @@
 
 <p>
   <a href="https://github.com/Atelje-Vagabond/atomvm-cbor/actions/workflows/release-gate.yml"><img height="20" alt="Public Release Gate" src="https://img.shields.io/github/actions/workflow/status/Atelje-Vagabond/atomvm-cbor/release-gate.yml?branch=main&amp;label=release%20gate&amp;style=flat"></a>
-  <a href="https://github.com/Atelje-Vagabond/atomvm-cbor/blob/main/docs/benchmarks.md"><img height="20" alt="Line coverage 99.43%" src="https://img.shields.io/badge/line%20coverage-99.43%25-brightgreen?style=flat"></a>
-  <a href="https://github.com/Atelje-Vagabond/atomvm-cbor/blob/main/docs/benchmarks.md"><img height="20" alt="Branch coverage 99.07%" src="https://img.shields.io/badge/branch%20coverage-99.07%25-brightgreen?style=flat"></a>
+  <a href="https://github.com/Atelje-Vagabond/atomvm-cbor/blob/main/docs/benchmarks.md"><img height="20" alt="Line and branch coverage gate 95%" src="https://img.shields.io/github/actions/workflow/status/Atelje-Vagabond/atomvm-cbor/release-gate.yml?branch=main&amp;label=coverage%20%E2%89%A595%25&amp;style=flat"></a>
   <a href="LICENSE"><img height="20" alt="MIT License" src="https://img.shields.io/github/license/Atelje-Vagabond/atomvm-cbor?style=flat"></a>
   <a href="https://www.erlang.org/"><img height="20" alt="Erlang OTP 25+" src="https://img.shields.io/badge/Erlang%2FOTP-25%2B-A90533?style=flat&amp;logo=erlang&amp;logoColor=white"></a>
   <a href="https://www.atomvm.net/"><img height="20" alt="AtomVM 0.6.6" src="https://img.shields.io/badge/AtomVM-0.6.6-5C2D91?style=flat"></a>
