@@ -106,7 +106,7 @@ jobs:
           /tmp/gitleaks/gitleaks detect --source . --no-git --redact --verbose
 
   otp:
-    name: OTP ${{ matrix.otp }}
+    name: OTP validation
     needs: [hygiene, performance]
     if: >-
       always() &&
@@ -131,7 +131,7 @@ jobs:
         with:
           otp-version: ${{ matrix.otp }}
           rebar3-version: ${{ matrix.otp == '25' && '3.24.0' || '3.25.1' }}
-      - name: Compile and test
+      - name: Compile and test on OTP ${{ matrix.otp }}
         run: |
           set -euo pipefail
           rebar3 compile
@@ -245,7 +245,7 @@ jobs:
           ATOMVM=/tmp/atomvm/atomvm ATOMVMLIB=/tmp/atomvm/atomvmlib.avm bash scripts/test-atomvm.sh
 
   esp-idf:
-    name: ESP-IDF ${{ matrix.idf }}
+    name: ESP-IDF validation
     needs: [hygiene, performance]
     if: >-
       always() &&
@@ -265,7 +265,7 @@ jobs:
           ref: ${{ env.EXPECTED_SHA }}
       - name: Assert exact checkout
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
-      - name: Build official AtomVM 0.6.6 with ESP-IDF
+      - name: Build official AtomVM 0.6.6 with ESP-IDF ${{ matrix.idf }}
         run: bash scripts/test-esp-idf.sh "${{ matrix.idf }}"
 
   package:
@@ -347,7 +347,7 @@ jobs:
           mkdir -p "${consumer}/src" "${consumer}/_checkouts"
           cp -a "${PACKAGE_DIR}" "${consumer}/_checkouts/avm_cbor"
           printf '{erl_opts, [debug_info]}.\n{deps, [{avm_cbor, "~> %s", {pkg, atomvm_cbor}}]}.\n' "${RELEASE_VERSION}" > "${consumer}/rebar.config"
-          printf '{application, rebar_consumer, [{vsn, "0.0.0"}, {modules, [rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/rebar_consumer.app.src"
+          printf '{application, rebar_consumer, [{description, "Release-gate Rebar3 consumer"}, {vsn, "0.0.0"}, {modules, [rebar_consumer]}, {applications, [kernel, stdlib, avm_cbor]}]}.\n' > "${consumer}/src/rebar_consumer.app.src"
           printf -- '-module(rebar_consumer).\n-export([run/0]).\nrun() -> avm_cbor:decode(<<1>>).\n' > "${consumer}/src/rebar_consumer.erl"
           (cd "${consumer}" && rebar3 compile)
       - name: Compile clean Mix consumer
