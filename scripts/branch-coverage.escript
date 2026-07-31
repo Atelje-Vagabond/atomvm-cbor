@@ -603,30 +603,38 @@ write_uncovered(Results) ->
 
 print_summary(Summary) ->
     print_metric("True branch coverage", maps:get(total, Summary)),
-    print_metric("Changed-branch coverage", maps:get(changed, Summary)),
+    print_changed_metric("Changed-branch coverage", maps:get(changed, Summary)),
     print_metric("Critical-path branch coverage", maps:get(critical, Summary)).
 
 print_metric(Label, {Covered, Total}) ->
     io:format("~s: ~.2f% (~B/~B)~n", [Label, percentage(Covered, Total), Covered, Total]).
 
+print_changed_metric(Label, {_Covered, 0}) ->
+    io:format("~s: N/A (0/0; no changed executable branches)~n", [Label]);
+print_changed_metric(Label, Metric) ->
+    print_metric(Label, Metric).
+
 enforce(Summary, Threshold) ->
     TotalPass = passes(maps:get(total, Summary), Threshold),
-    ChangedPass = passes(maps:get(changed, Summary), Threshold),
+    ChangedPass = passes_if_present(maps:get(changed, Summary), Threshold),
     CriticalPass = passes(maps:get(critical, Summary), 100),
     case TotalPass andalso ChangedPass andalso CriticalPass of
         true ->
             io:format(
-                "True branch gate passed: total and changed >= ~B%; critical = 100%.~n",
-                [Threshold]
+                "True branch gate passed: total >= ~B%; changed >= ~B% when present; critical = 100%.~n",
+                [Threshold, Threshold]
             );
         false ->
             io:format(
                 standard_error,
-                "True branch gate failed: total and changed must be >= ~B%; critical must be 100%.~n",
-                [Threshold]
+                "True branch gate failed: total must be >= ~B%; changed must be >= ~B% when present; critical must be 100%.~n",
+                [Threshold, Threshold]
             ),
             halt(1)
     end.
+
+passes_if_present({_Covered, 0}, _Threshold) -> true;
+passes_if_present(Metric, Threshold) -> passes(Metric, Threshold).
 
 percentage(_Covered, 0) -> 0.0;
 percentage(Covered, Total) -> Covered * 100.0 / Total.

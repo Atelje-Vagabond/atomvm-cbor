@@ -263,7 +263,7 @@ Security compatibility corrections in this remediation are intentional:
 
 OTP `cover` measures executable lines. It does not provide true source branch
 coverage, so `scripts/branch-coverage.escript` compiles a test-only transformed
-copy of the two source modules and counts these actual outcomes:
+copy of the three source modules and counts these actual outcomes:
 
 - case, if, multi-clause function, and anonymous-function selection;
 - complete guard true/false results;
@@ -278,6 +278,12 @@ coverage. Machine-readable evidence is written to `coverage/lines.json` and
 `coverage/branches.json`; `coverage/uncovered.txt` lists every uncovered line
 and branch.
 
+Changed-source coverage is enforced only when the diff contains at least one
+executable line or branch. A `0/0` changed set is reported as not applicable and
+passes only that delta criterion; the 95% total gates and 100% critical-path
+gates remain mandatory. This prevents documentation or release-metadata changes
+from being mislabeled as 0% covered without weakening runtime coverage.
+
 The deterministic indefinite-policy gate, original-key capture, AtomVM-safe
 bytewise comparator, full map loop, and partial measuring map loop are all in
 the 100% critical line/true-branch set.
@@ -285,4 +291,3 @@ the 100% critical line/true-branch set.
 The reproducible randomized suite uses seed `{2026,7,30}`. Any randomized
 failure reports that seed and a counterexample minimized by the suite's binary
 or Erlang-term shrinker.
-
