@@ -28,4 +28,13 @@ docs/benchmarks/*--*-local.md
 __pycache__/
 *.pyc
 rebar.lock
-erl_crash.dump
+
+# Crash dumps
+*.dump
+*.crashdump
+*.dmp
+*.mdmp
+*.crash
+core
+core.*
+hs_err_pid*.log

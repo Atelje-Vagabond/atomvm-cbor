@@ -7,7 +7,11 @@
     decode_start/2, decode_continue/2,
     decode_all/1, decode_all/2,
     decode_sequence/1, decode_sequence/2,
+    sequence_fold/3,
     encode/1, encode/2,
+    encode_with_size/1, encode_with_size/2,
+    encode_sequence/1, encode_sequence/2,
+    validate_all/1, validate_all/2,
     partial_decode/1, partial_decode/2,
     partial_value_bytes/1,
     partial_deep_decode/1,
@@ -19,6 +23,11 @@
     partial_offset/1,
     partial_length/1,
     partial_contents/1,
+    partial_map_fold/3,
+    partial_array_fold/3,
+    partial_select/2,
+    partial_map_find/2,
+    partial_array_nth/2,
     get/2, get/3, require/2,
     as_text/1, as_bytes/1, as_int/1, as_bool/1,
     ble_options/0
@@ -122,6 +131,69 @@ encode(Val, Opts) when is_list(Opts) ->
 encode(_Val, _Opts) ->
     {error, invalid_options_list}.
 
+%% Encode once and return both the bytes and their exact size.
+-spec encode_with_size(term()) ->
+    {ok, binary(), non_neg_integer()} | {error, term()}.
+encode_with_size(Val) ->
+    add_encoded_size(encode_normalized(Val, ?CBOR_DEFAULT_OPTS)).
+
+-spec encode_with_size(term(), term()) ->
+    {ok, binary(), non_neg_integer()} | {error, term()}.
+encode_with_size(Val, Opts) when is_list(Opts) ->
+    case normalize_opts(Opts) of
+        {error, _} = Err -> Err;
+        {ok, State} -> add_encoded_size(encode_normalized(Val, State))
+    end;
+encode_with_size(_Val, _Opts) ->
+    {error, invalid_options_list}.
+
+add_encoded_size({ok, Bin}) -> {ok, Bin, byte_size(Bin)};
+add_encoded_size({error, _} = Err) -> Err.
+
+%% Encode an RFC 8742 CBOR sequence as concatenated data items. Each item is
+%% encoded once, item binaries are accumulated in reverse order, and the final
+%% output is constructed once so the sequence layer is not quadratic.
+-spec encode_sequence(term()) -> {ok, binary()} | {error, term()}.
+encode_sequence(Values) when is_list(Values) ->
+    encode_sequence_normalized(Values, ?CBOR_DEFAULT_OPTS);
+encode_sequence(_Values) ->
+    {error, invalid_input}.
+
+-spec encode_sequence(term(), term()) -> {ok, binary()} | {error, term()}.
+encode_sequence(Values, Opts) when is_list(Values), is_list(Opts) ->
+    case normalize_opts(Opts) of
+        {error, _} = Err -> Err;
+        {ok, State} -> encode_sequence_normalized(Values, State)
+    end;
+encode_sequence(Values, _Opts) when is_list(Values) ->
+    {error, invalid_options_list};
+encode_sequence(_Values, _Opts) ->
+    {error, invalid_input}.
+
+encode_sequence_normalized(Values, Opts) ->
+    encode_sequence_items(Values, Opts, 0, 0, []).
+
+encode_sequence_items([], _Opts, _Count, _Size, Acc) ->
+    {ok, list_to_binary(lists:reverse(Acc))};
+encode_sequence_items([Value | Rest], Opts, Count, Size, Acc) ->
+    NextCount = Count + 1,
+    case check_item_limit(NextCount, Opts) of
+        {error, _} = Err -> Err;
+        ok ->
+            case encode_normalized(Value, Opts) of
+                {error, _} = Err -> Err;
+                {ok, Bin} ->
+                    NextSize = Size + byte_size(Bin),
+                    case check_max_bytes(NextSize, Opts) of
+                        {error, _} = Err -> Err;
+                        ok -> encode_sequence_items(
+                            Rest, Opts, NextCount, NextSize, [Bin | Acc])
+                    end
+            end
+    end;
+encode_sequence_items(_ImproperTail, _Opts, _Count, _Size, _Acc) ->
+    {error, invalid_input}.
+
 encode_normalized(Val, State) ->
     try do_encode(Val, State, 0) of
         Bin when is_binary(Bin) ->
@@ -205,6 +277,54 @@ partial_length(Partial) -> avm_cbor_partial:item_length(Partial).
 %% suitable for walking with repeated partial_decode calls.
 -spec partial_contents(term()) -> {ok, binary()} | {error, term()}.
 partial_contents(Partial) -> avm_cbor_partial:contents(Partial).
+
+%% Traverse map pairs as opaque descriptors without deep-decoding their values.
+%% Fun(KeyPartial, ValuePartial, Acc) must return {cont, NewAcc} or
+%% {halt, Result}.  Callback exceptions are application errors and propagate.
+-spec partial_map_fold(term(), fun((term(), term(), term()) ->
+    {cont, term()} | {halt, term()}), term()) -> {ok, term()} | {error, term()}.
+partial_map_fold(Partial, Fun, Acc) -> avm_cbor_partial:map_fold(Partial, Fun, Acc).
+
+%% Traverse array elements as opaque descriptors.  The callback contract is
+%% the same as partial_map_fold/3, without a key argument.
+-spec partial_array_fold(term(), fun((term(), term()) ->
+    {cont, term()} | {halt, term()}), term()) -> {ok, term()} | {error, term()}.
+partial_array_fold(Partial, Fun, Acc) -> avm_cbor_partial:array_fold(Partial, Fun, Acc).
+
+%% Select normal Erlang key terms in one map pass.  Found pairs are returned in
+%% CBOR map order; missing keys retain request order.  First duplicate wins.
+-spec partial_select(term(), term()) ->
+    {ok, [{term(), term()}], [term()]} | {error, term()}.
+partial_select(Partial, Keys) -> avm_cbor_partial:select(Partial, Keys).
+
+%% Find the first matching normal Erlang key term without decoding its value.
+-spec partial_map_find(term(), term()) -> {ok, term()} | {error, term()}.
+partial_map_find(Partial, Key) -> avm_cbor_partial:map_find(Partial, Key).
+
+%% Return an array element descriptor by zero-based index.
+-spec partial_array_nth(term(), term()) -> {ok, term()} | {error, term()}.
+partial_array_nth(Partial, Index) -> avm_cbor_partial:array_nth(Partial, Index).
+
+%% Validate exactly one complete item without materializing its nested Erlang
+%% value.  Defaults and accepted options intentionally match partial_decode.
+-spec validate_all(term()) -> ok | {error, term()}.
+validate_all(Bin) when is_binary(Bin) ->
+    validate_partial_result(avm_cbor_partial:decode(Bin));
+validate_all(_Bin) ->
+    {error, invalid_input}.
+
+-spec validate_all(term(), term()) -> ok | {error, term()}.
+validate_all(Bin, Opts) when is_binary(Bin), is_list(Opts) ->
+    validate_partial_result(avm_cbor_partial:decode(Bin, Opts));
+validate_all(Bin, _Opts) when is_binary(Bin) ->
+    {error, invalid_options_list};
+validate_all(_Bin, _Opts) ->
+    {error, invalid_input}.
+
+validate_partial_result({ok, _Partial, <<>>}) -> ok;
+validate_partial_result({ok, _Partial, Rest}) ->
+    {error, {trailing_bytes, byte_size(Rest)}};
+validate_partial_result({error, _} = Err) -> Err.
 
 %%--------------------------------------------------------------------
 %% Options
@@ -501,6 +621,35 @@ decode_sequence_small_items(Bin, State, Acc) ->
             {ok, lists:reverse(Acc), Bin};
         {error, _} = Err ->
             Err
+    end.
+
+%% Fold complete sequence items without building the decode_sequence/1 result
+%% list.  The callback returns {cont, NewAcc} or {halt, Result}.  A truncated
+%% final item is returned unchanged as Rest, matching decode_sequence/1.
+-spec sequence_fold(term(), term(), term()) ->
+    {ok, term(), binary()} | {error, term()}.
+sequence_fold(Bin, Fun, Acc) when is_binary(Bin), is_function(Fun, 2) ->
+    State = new_decode_state(?CBOR_DEFAULT_OPTS),
+    case check_max_bytes(byte_size(Bin), decode_opts(State)) of
+        ok -> sequence_fold_items(Bin, State, Fun, Acc);
+        {error, _} = Err -> Err
+    end;
+sequence_fold(Bin, _Fun, _Acc) when is_binary(Bin) ->
+    {error, invalid_callback};
+sequence_fold(_Bin, _Fun, _Acc) ->
+    {error, invalid_input}.
+
+sequence_fold_items(<<>>, _State, _Fun, Acc) -> {ok, Acc, <<>>};
+sequence_fold_items(Bin, State, Fun, Acc) ->
+    case decode_item(Bin, State, 0) of
+        {ok, Item, Rest, State1} ->
+            case Fun(Item, Acc) of
+                {cont, NewAcc} -> sequence_fold_items(Rest, State1, Fun, NewAcc);
+                {halt, Result} -> {ok, Result, Rest};
+                _ -> {error, invalid_fold_result}
+            end;
+        {error, truncated} -> {ok, Acc, Bin};
+        {error, _} = Err -> Err
     end.
 
 %%--------------------------------------------------------------------

@@ -17,6 +17,8 @@
     16#18, 29, 16#18, 30, 16#18, 31, 16#18, 32
 >>).
 -define(MALFORMED, <<16#9A, 0, 0, 16#10, 0, 1, 2, 3>>).
+-define(BENEFIT_MAP, <<16#A3, 1, 2, 3, 4, 5, 6>>).
+-define(BENEFIT_ARRAY, <<16#85, 1, 2, 3, 4, 5>>).
 
 -define(NESTED_TERM, [
     {map, [{1, [2, 3, 4]}]},
@@ -117,7 +119,7 @@ workloads() ->
         {"nested_encode", 3000, fun nested_encode/0},
         {"sequence_decode_32", 2000, fun sequence_decode/0},
         partial_workload()
-    ] ++ deterministic_workloads() ++ [
+    ] ++ deterministic_workloads() ++ benefit_workloads() ++ [
         {"malformed_declared_array", 5000, fun malformed_decode/0}
     ].
 
@@ -136,6 +138,32 @@ deterministic_workloads() -> [
 deterministic_workloads() -> [
     {"deterministic_map_encode", unavailable, unavailable},
     {"deterministic_map_decode", unavailable, unavailable}
+].
+-endif.
+
+-ifdef(HAS_BENEFIT_APIS).
+benefit_workloads() -> [
+    {"encode_with_size_nested", 3000, fun encode_with_size_nested/0},
+    {"encode_sequence_32", 2000, fun encode_sequence_32/0},
+    {"sequence_fold_32", 2000, fun sequence_fold_32/0},
+    {"validate_all_nested", 3000, fun validate_all_nested/0},
+    {"partial_map_fold", 2000, fun partial_map_fold/0},
+    {"partial_array_fold", 2000, fun partial_array_fold/0},
+    {"partial_select", 2000, fun partial_select/0},
+    {"partial_map_find", 2000, fun partial_map_find/0},
+    {"partial_array_nth", 2000, fun partial_array_nth/0}
+].
+-else.
+benefit_workloads() -> [
+    {"encode_with_size_nested", unavailable, unavailable},
+    {"encode_sequence_32", unavailable, unavailable},
+    {"sequence_fold_32", unavailable, unavailable},
+    {"validate_all_nested", unavailable, unavailable},
+    {"partial_map_fold", unavailable, unavailable},
+    {"partial_array_fold", unavailable, unavailable},
+    {"partial_select", unavailable, unavailable},
+    {"partial_map_find", unavailable, unavailable},
+    {"partial_array_nth", unavailable, unavailable}
 ].
 -endif.
 
@@ -219,6 +247,54 @@ deterministic_encode() ->
 
 deterministic_decode() ->
     {ok, {map, _}, <<>>} = avm_cbor:decode(?DETERMINISTIC_CBOR, [{deterministic, true}]),
+    ok.
+-endif.
+
+-ifdef(HAS_BENEFIT_APIS).
+encode_with_size_nested() ->
+    {ok, ?NESTED, _Size} = avm_cbor:encode_with_size(?NESTED_TERM),
+    ok.
+
+encode_sequence_32() ->
+    {ok, ?SEQUENCE} = avm_cbor:encode_sequence(lists:seq(1, 32)),
+    ok.
+
+sequence_fold_32() ->
+    {ok, 528, <<>>} = avm_cbor:sequence_fold(
+        ?SEQUENCE, fun(Item, Acc) -> {cont, Item + Acc} end, 0),
+    ok.
+
+validate_all_nested() ->
+    ok = avm_cbor:validate_all(?NESTED),
+    ok.
+
+partial_map_fold() ->
+    {ok, Partial, <<>>} = avm_cbor:partial_decode(?BENEFIT_MAP),
+    {ok, 3} = avm_cbor:partial_map_fold(
+        Partial, fun(_Key, _Value, Count) -> {cont, Count + 1} end, 0),
+    ok.
+
+partial_array_fold() ->
+    {ok, Partial, <<>>} = avm_cbor:partial_decode(?BENEFIT_ARRAY),
+    {ok, 5} = avm_cbor:partial_array_fold(
+        Partial, fun(_Value, Count) -> {cont, Count + 1} end, 0),
+    ok.
+
+partial_select() ->
+    {ok, Partial, <<>>} = avm_cbor:partial_decode(?BENEFIT_MAP),
+    {ok, [{1, _}, {5, _}], []} = avm_cbor:partial_select(Partial, [1, 5]),
+    ok.
+
+partial_map_find() ->
+    {ok, Partial, <<>>} = avm_cbor:partial_decode(?BENEFIT_MAP),
+    {ok, ValuePartial} = avm_cbor:partial_map_find(Partial, 5),
+    {ok, 6} = avm_cbor:partial_deep_decode(ValuePartial),
+    ok.
+
+partial_array_nth() ->
+    {ok, Partial, <<>>} = avm_cbor:partial_decode(?BENEFIT_ARRAY),
+    {ok, ValuePartial} = avm_cbor:partial_array_nth(Partial, 3),
+    {ok, 4} = avm_cbor:partial_deep_decode(ValuePartial),
     ok.
 -endif.
 

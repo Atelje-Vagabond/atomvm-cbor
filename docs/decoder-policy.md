@@ -18,6 +18,18 @@ Each public call is one operation. `decode_all/1,2` and
 `partial_deep_decode/1` performs a separately bounded deep-decode operation
 using the normalized policy stored in the validated opaque descriptor.
 
+`partial_map_fold/3` and `partial_array_fold/3` start a separate traversal
+operation with that stored policy. They charge the parent container, thread one
+state while measuring child descriptors, and stop immediately on `{halt,
+Result}`. The original `partial_decode` operation already validated the whole
+represented item; the fold pass does not deep-decode child values.
+
+`sequence_fold/3` threads the default decode state across visited top-level
+items. `encode_sequence/1,2` applies `max_items` to the sequence item count and
+`max_bytes` to the total concatenated output; individual items retain all
+existing encoder limits. `validate_all/1,2` uses the partial validation policy
+and additionally requires that no trailing input remains.
+
 ## Global node/work budget
 
 `max_items` is a positive global node/work budget, not a per-container length.
@@ -250,6 +262,12 @@ wrap the complete decoder in a broad catch. Important stable results include:
 | Non-canonical deterministic NaN | `{error, {non_deterministic_nan, 16#7E00}}` |
 | Forged partial descriptor | `{error, not_a_partial}` |
 | Deep partial value with trailing bytes | `{error, {trailing_bytes, Count}}` |
+| Wrong descriptor container type | `{error, {expected_partial_type, map | array}}` |
+| Invalid fold callback or return | `{error, invalid_callback | invalid_fold_result}` |
+| Missing partial map key | `{error, not_found}` |
+| Invalid or absent array index | `{error, invalid_index}` or `{error, {index_out_of_range, Index}}` |
+| Duplicate key requested by `partial_select/2` | `{error, duplicate_requested_key}` |
+| Complete validation with trailing input | `{error, {trailing_bytes, Count}}` |
 
 Security compatibility corrections in this remediation are intentional:
 

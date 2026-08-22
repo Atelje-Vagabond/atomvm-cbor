@@ -332,6 +332,10 @@ public_boundary_errors_test() ->
     [?assertEqual({error, invalid_input}, avm_cbor:decode_all(Value)) || Value <- InvalidInputs],
     [?assertEqual({error, invalid_input}, avm_cbor:decode_sequence(Value)) ||
         Value <- InvalidInputs],
+    [?assertEqual({error, invalid_input}, avm_cbor:validate_all(Value)) ||
+        Value <- InvalidInputs],
+    [?assertEqual({error, invalid_input}, avm_cbor:encode_sequence(Value)) ||
+        Value <- InvalidInputs, not is_list(Value)],
     [?assertEqual({error, invalid_input}, avm_cbor:partial_decode(Value)) ||
         Value <- InvalidInputs],
     ?assertEqual({error, invalid_input}, avm_cbor:decode(not_binary, not_a_list)),
@@ -342,6 +346,8 @@ public_boundary_errors_test() ->
     ?assertEqual({error, invalid_options_list}, avm_cbor:decode_all(<<1>>, not_a_list)),
     ?assertEqual({error, invalid_options_list}, avm_cbor:decode_sequence(<<1>>, not_a_list)),
     ?assertEqual({error, invalid_options_list}, avm_cbor:partial_decode(<<1>>, not_a_list)),
+    ?assertEqual({error, invalid_options_list}, avm_cbor:validate_all(<<1>>, not_a_list)),
+    ?assertEqual({error, invalid_options_list}, avm_cbor:encode_sequence([1], not_a_list)),
     InvalidBooleanOptions = [
         allow_floats, allow_simple, allow_tags, allow_indefinite, preferred, deterministic
     ],
@@ -372,6 +378,21 @@ forged_partial_descriptor_test() ->
     ?assertEqual({error, not_a_partial}, avm_cbor:partial_size(Forged)),
     ?assertEqual({error, not_a_partial}, avm_cbor:partial_offset(Forged)),
     ?assertEqual({error, not_a_partial}, avm_cbor:partial_length(Forged)),
+    ?assertEqual({error, not_a_partial},
+                 avm_cbor:partial_map_fold(Forged, fun(_, _, A) -> {cont, A} end, ok)),
+    ?assertEqual({error, not_a_partial},
+                 avm_cbor:partial_array_fold(Forged, fun(_, A) -> {cont, A} end, ok)),
+    ?assertEqual({error, not_a_partial}, avm_cbor:partial_select(Forged, [])),
+    ?assertEqual({error, not_a_partial}, avm_cbor:partial_map_find(Forged, key)),
+    ?assertEqual({error, not_a_partial}, avm_cbor:partial_array_nth(Forged, 0)),
+    %% Invalid opaque descriptors take precedence over callback/key/index
+    %% validation and remain structured public errors.
+    ?assertEqual({error, not_a_partial},
+                 avm_cbor:partial_map_fold(Forged, not_a_function, ok)),
+    ?assertEqual({error, not_a_partial},
+                 avm_cbor:partial_array_fold(Forged, not_a_function, ok)),
+    ?assertEqual({error, not_a_partial}, avm_cbor:partial_select(Forged, not_a_list)),
+    ?assertEqual({error, not_a_partial}, avm_cbor:partial_array_nth(Forged, -1)),
     {ok, Valid, <<>>} = avm_cbor:partial_decode(<<16#80>>),
     InvalidFields = [
         setelement(2, Valid, invalid_type),
@@ -406,6 +427,57 @@ forged_partial_descriptor_test() ->
         avm_cbor:partial_deep_decode(setelement(4, Scalar, 0))
     ),
     ?assertEqual({error, no_contents}, avm_cbor:partial_contents(Scalar)).
+
+forged_partial_traversal_consistency_test() ->
+    MapFold = fun(_Key, _Value, Acc) -> {cont, Acc} end,
+    ArrayFold = fun(_Value, Acc) -> {cont, Acc} end,
+    {ok, ValidMap, <<>>} = avm_cbor:partial_decode(<<16#A1, 1, 2>>),
+    {ok, ValidArray, <<>>} = avm_cbor:partial_decode(<<16#81, 1>>),
+
+    %% These tuples retain a structurally plausible opaque shape but make the
+    %% encoded body or stored count inconsistent.  Public traversal must fail
+    %% with a structured error instead of invoking a callback or crashing.
+    BadMapKey = setelement(10, ValidMap, <<16#A1, 16#FF, 2>>),
+    BadMapValue = setelement(10, ValidMap, <<16#A1, 1, 16#FF>>),
+    BadMapCount = setelement(5, ValidMap, 0),
+    UndefinedMapCount = setelement(5, ValidMap, undefined),
+    BadArrayValue = setelement(10, ValidArray, <<16#81, 16#FF>>),
+    BadArrayCount = setelement(5, ValidArray, 0),
+    UndefinedArrayCount = setelement(5, ValidArray, undefined),
+    ?assertEqual({error, unexpected_break},
+                 avm_cbor:partial_map_fold(BadMapKey, MapFold, ok)),
+    ?assertEqual({error, unexpected_break},
+                 avm_cbor:partial_map_fold(BadMapValue, MapFold, ok)),
+    ?assertEqual({error, invalid_partial_contents},
+                 avm_cbor:partial_map_fold(BadMapCount, MapFold, ok)),
+    ?assertEqual({error, unexpected_break},
+                 avm_cbor:partial_array_fold(BadArrayValue, ArrayFold, ok)),
+    ?assertEqual({error, invalid_partial_contents},
+                 avm_cbor:partial_array_fold(BadArrayCount, ArrayFold, ok)),
+    ?assertEqual({error, not_a_partial},
+                 avm_cbor:partial_map_fold(UndefinedMapCount, MapFold, ok)),
+    ?assertEqual({error, not_a_partial},
+                 avm_cbor:partial_array_fold(UndefinedArrayCount, ArrayFold, ok)),
+    ?assertEqual({error, not_a_partial},
+                 avm_cbor:partial_select(UndefinedMapCount, [missing])),
+    ?assertEqual({error, not_a_partial},
+                 avm_cbor:partial_map_find(UndefinedMapCount, missing)),
+    ?assertEqual({error, not_a_partial},
+                 avm_cbor:partial_array_nth(UndefinedArrayCount, 1)),
+
+    %% A record-tag-shaped option tuple is not sufficient authority to bypass
+    %% the stored node budget during a later traversal operation.
+    Opts = element(11, ValidMap),
+    ZeroItemOpts = setelement(3, Opts, 0),
+    ZeroBudgetMap = setelement(11, ValidMap, ZeroItemOpts),
+    ?assertEqual({error, {max_items_exceeded, 0}},
+                 avm_cbor:partial_map_fold(ZeroBudgetMap, MapFold, ok)).
+
+sequence_fold_default_byte_limit_test() ->
+    OverLimit = binary:copy(<<0>>, 1048577),
+    Fold = fun(_Item, Acc) -> {cont, Acc} end,
+    ?assertEqual({error, {max_bytes_exceeded, 1048576}},
+                 avm_cbor:sequence_fold(OverLimit, Fold, ok)).
 
 one_byte_chunks(Count) ->
     list_to_binary([16#5F, lists:duplicate(Count, <<16#41, 0>>), 16#FF]).

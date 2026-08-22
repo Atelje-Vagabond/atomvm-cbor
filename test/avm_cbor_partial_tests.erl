@@ -25,6 +25,10 @@ run_coverage() ->
         {partial_deterministic_decode, fun test_partial_deterministic_decode/0},
         {partial_rest_bytes, fun test_partial_rest_bytes/0},
         {partial_matches_full_decode, fun test_partial_matches_full_decode/0},
+        {partial_map_fold, fun test_partial_map_fold/0},
+        {partial_array_fold, fun test_partial_array_fold/0},
+        {partial_select_and_find, fun test_partial_select_and_find/0},
+        {partial_array_nth, fun test_partial_array_nth/0},
         {partial_error_empty, fun test_partial_error_empty/0},
         {partial_error_truncated, fun test_partial_error_truncated/0},
         {partial_error_depth, fun test_partial_error_depth/0},
@@ -430,6 +434,116 @@ check_parity([Bin | Rest]) ->
 
 test_partial_error_empty() ->
     assert(empty, partial_error(<<>>)),
+    ok.
+
+%%--------------------------------------------------------------------
+%% Single-pass container traversal and lookup
+%%--------------------------------------------------------------------
+
+test_partial_map_fold() ->
+    %% {"a": 1, "b": [2, 3], "c": 4}
+    Partial = partial_ok(<<16#A3, 16#61, "a", 1,
+                           16#61, "b", 16#82, 2, 3,
+                           16#61, "c", 4>>),
+    Fold = fun(KeyPartial, ValuePartial, Acc) ->
+        {ok, Key} = avm_cbor:partial_deep_decode(KeyPartial),
+        {cont, [{Key,
+                 avm_cbor:partial_type(ValuePartial),
+                 avm_cbor:partial_offset(KeyPartial),
+                 avm_cbor:partial_offset(ValuePartial)} | Acc]}
+    end,
+    assert(
+        {ok, [{{text, <<"c">>}, unsigned, 9, 11},
+              {{text, <<"b">>}, array, 4, 6},
+              {{text, <<"a">>}, unsigned, 1, 3}]},
+        avm_cbor:partial_map_fold(Partial, Fold, [])
+    ),
+    %% The second pass stops after the first pair and does not deep-decode the
+    %% later nested value.  The original descriptor already validated it.
+    Halt = fun(_KeyPartial, ValuePartial, Count) ->
+        {halt, {Count + 1, avm_cbor:partial_type(ValuePartial)}}
+    end,
+    assert({ok, {1, unsigned}}, avm_cbor:partial_map_fold(Partial, Halt, 0)),
+    assert({error, {expected_partial_type, map}},
+           avm_cbor:partial_map_fold(partial_ok(<<16#81, 1>>), Fold, [])),
+    assert({error, invalid_callback},
+           avm_cbor:partial_map_fold(Partial, not_a_function, [])),
+    BadResult = fun(_K, _V, _Acc) -> invalid end,
+    assert({error, invalid_fold_result},
+           avm_cbor:partial_map_fold(Partial, BadResult, [])),
+    %% Indefinite containers retain absolute child offsets and use their
+    %% measured pair count; the break byte is never exposed as an item.
+    Indef = partial_ok_with_opts(
+        <<16#BF, 1, 2, 3, 4, 16#FF>>,
+        [{allow_indefinite, true}]
+    ),
+    OffsetFold = fun(K, V, Acc) ->
+        {cont, [{avm_cbor:partial_offset(K), avm_cbor:partial_offset(V)} | Acc]}
+    end,
+    assert({ok, [{3, 4}, {1, 2}]},
+           avm_cbor:partial_map_fold(Indef, OffsetFold, [])),
+    ok.
+
+test_partial_array_fold() ->
+    Partial = partial_ok(<<16#83, 1, 16#82, 2, 3, 4>>),
+    Fold = fun(ElementPartial, Acc) ->
+        {cont, [{avm_cbor:partial_type(ElementPartial),
+                 avm_cbor:partial_offset(ElementPartial)} | Acc]}
+    end,
+    assert({ok, [{unsigned, 5}, {array, 2}, {unsigned, 1}]},
+           avm_cbor:partial_array_fold(Partial, Fold, [])),
+    Halt = fun(ElementPartial, Count) ->
+        case avm_cbor:partial_type(ElementPartial) of
+            array -> {halt, {Count + 1, array}};
+            _ -> {cont, Count + 1}
+        end
+    end,
+    assert({ok, {2, array}}, avm_cbor:partial_array_fold(Partial, Halt, 0)),
+    assert({error, {expected_partial_type, array}},
+           avm_cbor:partial_array_fold(partial_ok(<<16#A0>>), Fold, [])),
+    assert({error, invalid_callback},
+           avm_cbor:partial_array_fold(Partial, fun(_A, _B, _C) -> ok end, [])),
+    BadResult = fun(_Element, _Acc) -> invalid end,
+    assert({error, invalid_fold_result},
+           avm_cbor:partial_array_fold(Partial, BadResult, [])),
+    ok.
+
+test_partial_select_and_find() ->
+    %% Duplicate encoded keys are allowed outside deterministic mode.  Both
+    %% select and find intentionally return the first matching occurrence.
+    Partial = partial_ok(<<16#A3,
+                           16#61, "a", 1,
+                           16#61, "a", 2,
+                           16#61, "b", 16#81, 3>>),
+    %% Request order deliberately differs from map order.  Found stays in map
+    %% encounter order while unmatched requests retain their original order.
+    {ok, Found, Missing} =
+        avm_cbor:partial_select(Partial, [{text, <<"b">>}, {text, <<"a">>}, 9]),
+    assert([9], Missing),
+    [{_, AValue}, {_, BValue}] = Found,
+    assert(1, deep_ok(AValue)),
+    assert(array, avm_cbor:partial_type(BValue)),
+    assert({ok, [], []}, avm_cbor:partial_select(Partial, [])),
+    assert({error, duplicate_requested_key},
+           avm_cbor:partial_select(Partial, [{text, <<"a">>}, {text, <<"a">>}])),
+    assert({error, invalid_key_list}, avm_cbor:partial_select(Partial, not_a_list)),
+    assert({error, {expected_partial_type, map}},
+           avm_cbor:partial_select(partial_ok(<<16#80>>), [])),
+    {ok, FirstA} = avm_cbor:partial_map_find(Partial, {text, <<"a">>}),
+    assert(1, deep_ok(FirstA)),
+    assert({error, not_found}, avm_cbor:partial_map_find(Partial, {text, <<"z">>})),
+    ok.
+
+test_partial_array_nth() ->
+    Partial = partial_ok(<<16#83, 1, 16#82, 2, 3, 4>>),
+    {ok, First} = avm_cbor:partial_array_nth(Partial, 0),
+    assert(1, deep_ok(First)),
+    {ok, Nested} = avm_cbor:partial_array_nth(Partial, 1),
+    assert(array, avm_cbor:partial_type(Nested)),
+    assert({error, {index_out_of_range, 3}}, avm_cbor:partial_array_nth(Partial, 3)),
+    assert({error, invalid_index}, avm_cbor:partial_array_nth(Partial, -1)),
+    assert({error, {expected_partial_type, array}},
+           avm_cbor:partial_array_nth(partial_ok(<<16#A0>>), 0)),
     ok.
 
 test_partial_error_truncated() ->

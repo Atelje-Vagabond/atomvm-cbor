@@ -11,7 +11,10 @@
 
 A compact RFC 8949 CBOR encoder and decoder for AtomVM and constrained Erlang runtimes. It is pure Erlang, has no runtime dependencies, NIFs, or ports, and preserves the public `{text, Binary}` and `{map, Pairs}` representations.
 
-Version 0.2.0 is the first Hex.pm release. Public Git tag `v0.1.1` is the reproducible source and benchmark baseline and was never published to Hex.
+Version 0.3.0 adds bounded descriptor traversal, selective extraction, sequence
+encoding/folding, exact-size encoding, and complete-input validation. Version
+0.2.0 was the first Hex.pm release; public Git tag `v0.1.1` was never published
+to Hex.
 
 ## Installation
 
@@ -19,14 +22,14 @@ Rebar3 projects use the OTP application name `avm_cbor` and Hex package name `at
 
 ```erlang
 {deps, [
-    {avm_cbor, "~> 0.2.0", {pkg, atomvm_cbor}}
+    {avm_cbor, "~> 0.3.0", {pkg, atomvm_cbor}}
 ]}.
 ```
 
 Mix projects use:
 
 ```elixir
-{:avm_cbor, "~> 0.2.0", hex: :atomvm_cbor}
+{:avm_cbor, "~> 0.3.0", hex: :atomvm_cbor}
 ```
 
 ## Capabilities
@@ -35,7 +38,10 @@ Mix projects use:
 - Definite and bounded indefinite-length strings, arrays, and maps.
 - Preferred serialization and deterministic encoding/validation under explicit options.
 - Duplicate-map-key rejection and encoded-key ordering checks in deterministic decode.
-- Full decode, pull-based continuation decode, complete-input decode, CBOR sequence decode, and deferred partial decode.
+- Full decode, pull-based continuation decode, complete-input decode, bounded
+  CBOR sequence encode/decode/fold, and deferred partial decode.
+- Single-pass partial map/array folds, selective map lookup, and indexed array
+  access without deep-decoding unselected values.
 - Depth, node, input-byte, per-string, cumulative-string, and partial-string limits.
 - Structured errors for malformed, truncated, unsupported, and resource-bound inputs.
 - OTP 25+ and AtomVM 0.6.6 compatibility.
@@ -103,10 +109,21 @@ avm_cbor:decode(Binary).
 avm_cbor:decode(Binary, Options).
 avm_cbor:decode_all(Binary, Options).
 avm_cbor:decode_sequence(Binary, Options).
+avm_cbor:sequence_fold(Binary, Fun, Acc).
 avm_cbor:encode(Value, Options).
+avm_cbor:encode_with_size(Value, Options).
+avm_cbor:encode_sequence(Values, Options).
+avm_cbor:validate_all(Binary, Options).
 ```
 
 `decode/1,2` consumes one value and returns `{ok, Value, Rest}`. `decode_all/1,2` requires a complete input. `decode_sequence/1,2` returns all complete sequence items and retains a truncated final item as `Rest`.
+
+`encode_with_size/1,2` returns `{ok, Binary, Size}` from the real encode
+operation. `encode_sequence/1,2` emits concatenated RFC 8742 items while
+enforcing the configured item and total-byte limits. `sequence_fold/3` consumes
+complete sequence items with `{cont, NewAcc}` or `{halt, Result}` callbacks.
+`validate_all/1,2` validates exactly one complete item and rejects trailing
+bytes without constructing its nested Erlang value.
 
 ### Pull-based continuation decode
 
@@ -136,6 +153,19 @@ Length = avm_cbor:partial_length(Descriptor),
 ```
 
 Available accessors are `partial_value_bytes/1`, `partial_deep_decode/1`, `partial_skip/1`, `partial_type/1`, `partial_count/1`, `partial_tag/1`, `partial_size/1`, `partial_offset/1`, `partial_length/1`, and `partial_contents/1`.
+
+Maps and arrays can be traversed without deep-decoding unselected values:
+
+```erlang
+{ok, MapDescriptor, <<>>} = avm_cbor:partial_decode(Binary),
+{ok, ValueDescriptor} = avm_cbor:partial_map_find(MapDescriptor, Key),
+{ok, Value} = avm_cbor:partial_deep_decode(ValueDescriptor).
+```
+
+`partial_map_fold/3` and `partial_array_fold/3` support `{cont, NewAcc}` and
+`{halt, Result}` callbacks. `partial_select/2` finds a small requested key set
+in one map pass, `partial_map_find/2` returns the first matching value
+descriptor, and `partial_array_nth/2` uses a zero-based index.
 
 ## Options and limits
 
@@ -176,12 +206,13 @@ containers use the general bounded decoder and retain the same errors.
 - [Decoder policy and security limits](docs/decoder-policy.md)
 - [Pinned AtomVM memory evidence](docs/atomvm-memory-internals.md)
 - [Benchmark methodology](https://github.com/Atelje-Vagabond/atomvm-cbor/blob/main/docs/benchmarks.md)
+- [0.3.0 benchmark report](docs/benchmarks/0.3.0.md)
 - [Changelog](CHANGELOG.md)
 
 Run the public validation suite:
 
 ```bash
-scripts/release-check.sh 0.2.0
+scripts/release-check.sh 0.3.0
 ```
 
 Run the reproducible host benchmark:

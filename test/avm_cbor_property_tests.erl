@@ -125,6 +125,11 @@ run_random_binaries(Count, Seed) ->
     assert_no_binary_exception(decode, fun avm_cbor:decode/1, Bin, Seed),
     assert_no_binary_exception(decode_all, fun avm_cbor:decode_all/1, Bin, Seed),
     assert_no_binary_exception(decode_sequence, fun avm_cbor:decode_sequence/1, Bin, Seed),
+    assert_no_binary_exception(sequence_fold,
+                               fun(Value) -> avm_cbor:sequence_fold(
+                                   Value, fun(_, A) -> {cont, A} end, ok) end,
+                               Bin, Seed),
+    assert_no_binary_exception(validate_all, fun avm_cbor:validate_all/1, Bin, Seed),
     assert_no_binary_exception(partial_decode, fun avm_cbor:partial_decode/1, Bin, Seed),
     run_random_binaries(Count - 1, Seed).
 
@@ -163,6 +168,21 @@ run_random_terms(Count, Seed) ->
     assert_no_term_exception(partial_decode_2,
                              fun(Value) -> avm_cbor:partial_decode(Value, Opts) end,
                              {Input, Opts}, Seed),
+    assert_no_term_exception(encode_with_size_1, fun avm_cbor:encode_with_size/1,
+                             Input, Seed),
+    assert_no_term_exception(encode_with_size_2,
+                             fun(Value) -> avm_cbor:encode_with_size(Value, Opts) end,
+                             {Input, Opts}, Seed),
+    assert_no_term_exception(encode_sequence_1, fun avm_cbor:encode_sequence/1,
+                             Input, Seed),
+    assert_no_term_exception(encode_sequence_2,
+                             fun(Value) -> avm_cbor:encode_sequence(Value, Opts) end,
+                             {Input, Opts}, Seed),
+    assert_no_term_exception(validate_all_1, fun avm_cbor:validate_all/1,
+                             Input, Seed),
+    assert_no_term_exception(validate_all_2,
+                             fun(Value) -> avm_cbor:validate_all(Value, Opts) end,
+                             {Input, Opts}, Seed),
     assert_no_term_exception(decode_start,
                              fun(Value) -> avm_cbor:decode_start(Value, Opts) end,
                              {Input, Opts}, Seed),
@@ -182,6 +202,23 @@ run_random_terms(Count, Seed) ->
         {partial_contents, fun avm_cbor:partial_contents/1}
     ],
     [assert_no_term_exception(Name, Fun, Input, Seed) || {Name, Fun} <- PartialAccessors],
+    assert_no_term_exception(partial_map_fold,
+                             fun(Value) -> avm_cbor:partial_map_fold(
+                                 Value, fun(_, _, A) -> {cont, A} end, ok) end,
+                             Input, Seed),
+    assert_no_term_exception(partial_array_fold,
+                             fun(Value) -> avm_cbor:partial_array_fold(
+                                 Value, fun(_, A) -> {cont, A} end, ok) end,
+                             Input, Seed),
+    assert_no_term_exception(partial_select,
+                             fun(Value) -> avm_cbor:partial_select(Value, []) end,
+                             Input, Seed),
+    assert_no_term_exception(partial_map_find,
+                             fun(Value) -> avm_cbor:partial_map_find(Value, key) end,
+                             Input, Seed),
+    assert_no_term_exception(partial_array_nth,
+                             fun(Value) -> avm_cbor:partial_array_nth(Value, 0) end,
+                             Input, Seed),
     run_random_terms(Count - 1, Seed).
 
 assert_no_binary_exception(Name, Fun, Bin, Seed) ->
@@ -197,7 +234,9 @@ assert_no_term_exception(Name, Fun, Input, Seed) ->
     TestInput = case Input of
         {Value, _Options} when Name =:= decode_2; Name =:= decode_all_2;
                               Name =:= decode_sequence_2; Name =:= partial_decode_2;
-                              Name =:= decode_start; Name =:= decode_continue -> Value;
+                              Name =:= decode_start; Name =:= decode_continue;
+                              Name =:= encode_with_size_2; Name =:= encode_sequence_2;
+                              Name =:= validate_all_2 -> Value;
         _ -> Input
     end,
     try Fun(TestInput) of
@@ -210,7 +249,10 @@ assert_no_term_exception(Name, Fun, Input, Seed) ->
                                        Name =:= decode_sequence_2;
                                        Name =:= partial_decode_2;
                                        Name =:= decode_start;
-                                       Name =:= decode_continue -> {Minimized, Options};
+                                       Name =:= decode_continue;
+                                       Name =:= encode_with_size_2;
+                                       Name =:= encode_sequence_2;
+                                       Name =:= validate_all_2 -> {Minimized, Options};
                 _ -> Minimized
             end,
             erlang:error({property_failure, Name, Seed, Payload, {Class, Reason}})

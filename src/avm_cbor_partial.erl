@@ -18,7 +18,12 @@
     string_size/1,
     item_offset/1,
     item_length/1,
-    contents/1
+    contents/1,
+    map_fold/3,
+    array_fold/3,
+    select/2,
+    map_find/2,
+    array_nth/2
 ]).
 
 %% Opaque partial-decode descriptor.
@@ -162,6 +167,196 @@ contents(Partial = #cbor_partial{}) ->
     end;
 contents(_) -> {error, not_a_partial}.
 
+%%--------------------------------------------------------------------
+%% Single-pass container traversal
+%%--------------------------------------------------------------------
+
+map_fold(Partial, Fun, Acc) when is_function(Fun, 3) ->
+    case traversal_start(Partial, map) of
+        {ok, Count, Bin, State, Offset, Opts} ->
+            fold_map(Count, Bin, State, Offset, Opts, Fun, Acc);
+        {error, _} = Err -> Err
+    end;
+map_fold(Partial, _Fun, _Acc) ->
+    case valid_partial(Partial) of
+        true -> {error, invalid_callback};
+        false -> {error, not_a_partial}
+    end.
+
+array_fold(Partial, Fun, Acc) when is_function(Fun, 2) ->
+    case traversal_start(Partial, array) of
+        {ok, Count, Bin, State, Offset, Opts} ->
+            fold_array(Count, Bin, State, Offset, Opts, Fun, Acc);
+        {error, _} = Err -> Err
+    end;
+array_fold(Partial, _Fun, _Acc) ->
+    case valid_partial(Partial) of
+        true -> {error, invalid_callback};
+        false -> {error, not_a_partial}
+    end.
+
+select(Partial, Keys) when is_list(Keys) ->
+    case type(Partial) of
+        map -> select_keys(Partial, Keys);
+        {error, _} = Err -> Err;
+        _OtherType -> {error, {expected_partial_type, map}}
+    end;
+select(Partial, _Keys) ->
+    case valid_partial(Partial) of
+        true -> {error, invalid_key_list};
+        false -> {error, not_a_partial}
+    end.
+
+select_keys(_Partial, []) -> {ok, [], []};
+select_keys(Partial, Keys) ->
+    case unique_requested(Keys, []) of
+        {error, _} = Err -> Err;
+        Requested ->
+            SelectFun = fun(KeyPartial, ValuePartial, {Pending, Found}) ->
+                case deep_decode(KeyPartial) of
+                    {ok, Key} ->
+                        case take_requested(Key, Pending, []) of
+                            not_found -> {cont, {Pending, Found}};
+                            {found, RequestedKey, Rest} ->
+                                NewFound = [{RequestedKey, ValuePartial} | Found],
+                                case Rest of
+                                    [] -> {halt, {[], NewFound}};
+                                    _ -> {cont, {Rest, NewFound}}
+                                end
+                        end;
+                    {error, Reason} ->
+                        {halt, {select_error, Reason}}
+                end
+            end,
+            case map_fold(Partial, SelectFun, {Requested, []}) of
+                {ok, {select_error, Reason}} -> {error, Reason};
+                {ok, {Missing, Found}} -> {ok, lists:reverse(Found), Missing};
+                {error, _} = Err -> Err
+            end
+    end.
+
+map_find(Partial, WantedKey) ->
+    FindFun = fun(KeyPartial, ValuePartial, not_found) ->
+        case deep_decode(KeyPartial) of
+            {ok, Key} when Key =:= WantedKey -> {halt, {found, ValuePartial}};
+            {ok, _Key} -> {cont, not_found};
+            {error, Reason} -> {halt, {find_error, Reason}}
+        end
+    end,
+    case map_fold(Partial, FindFun, not_found) of
+        {ok, {found, ValuePartial}} -> {ok, ValuePartial};
+        {ok, not_found} -> {error, not_found};
+        {ok, {find_error, Reason}} -> {error, Reason};
+        {error, _} = Err -> Err
+    end.
+
+array_nth(Partial, Index) when is_integer(Index), Index >= 0 ->
+    NthFun = fun(ElementPartial, Current) when Current =:= Index ->
+                     {halt, {found, ElementPartial}};
+                (_ElementPartial, Current) ->
+                     {cont, Current + 1}
+             end,
+    case array_fold(Partial, NthFun, 0) of
+        {ok, {found, ElementPartial}} -> {ok, ElementPartial};
+        {ok, _Count} -> {error, {index_out_of_range, Index}};
+        {error, _} = Err -> Err
+    end;
+array_nth(Partial, _Index) ->
+    case valid_partial(Partial) of
+        true -> {error, invalid_index};
+        false -> {error, not_a_partial}
+    end.
+
+traversal_start(Partial = #cbor_partial{
+    type = Type,
+    count = Count,
+    bytes = Bytes,
+    hdr_len = HdrLen,
+    indef = Indef,
+    offset = ItemOffset,
+    opts = Opts
+}, ExpectedType) ->
+    case valid_partial(Partial) of
+        false -> {error, not_a_partial};
+        true when Type =/= ExpectedType ->
+            {error, {expected_partial_type, ExpectedType}};
+        true ->
+            ContentLen = case Indef of
+                false -> byte_size(Bytes) - HdrLen;
+                true -> byte_size(Bytes) - HdrLen - 1
+            end,
+            <<_:HdrLen/binary, Content:ContentLen/binary, _/binary>> = Bytes,
+            State0 = avm_cbor:new_decode_state(Opts),
+            case avm_cbor:consume_node(State0) of
+                {ok, State1} ->
+                    {ok, Count, Content, State1, ItemOffset + HdrLen, Opts};
+                {error, _} = Err -> Err
+            end
+    end;
+traversal_start(_, _ExpectedType) ->
+    {error, not_a_partial}.
+
+fold_map(0, <<>>, _State, _Offset, _Opts, _Fun, Acc) -> {ok, Acc};
+fold_map(0, _Rest, _State, _Offset, _Opts, _Fun, _Acc) ->
+    {error, invalid_partial_contents};
+fold_map(Count, Bin, State, Offset, Opts, Fun, Acc) ->
+    case parse_at(Bin, State, Offset, Opts) of
+        {ok, KeyPartial, Rest1, State1} ->
+            ValueOffset = Offset + (byte_size(Bin) - byte_size(Rest1)),
+            case parse_at(Rest1, State1, ValueOffset, Opts) of
+                {ok, ValuePartial, Rest2, State2} ->
+                    case Fun(KeyPartial, ValuePartial, Acc) of
+                        {cont, NewAcc} ->
+                            NextOffset = ValueOffset +
+                                (byte_size(Rest1) - byte_size(Rest2)),
+                            fold_map(Count - 1, Rest2, State2, NextOffset,
+                                     Opts, Fun, NewAcc);
+                        {halt, Result} -> {ok, Result};
+                        _ -> {error, invalid_fold_result}
+                    end;
+                {error, _} = Err -> Err
+            end;
+        {error, _} = Err -> Err
+    end.
+
+fold_array(0, <<>>, _State, _Offset, _Opts, _Fun, Acc) -> {ok, Acc};
+fold_array(0, _Rest, _State, _Offset, _Opts, _Fun, _Acc) ->
+    {error, invalid_partial_contents};
+fold_array(Count, Bin, State, Offset, Opts, Fun, Acc) ->
+    case parse_at(Bin, State, Offset, Opts) of
+        {ok, ElementPartial, Rest, State1} ->
+            case Fun(ElementPartial, Acc) of
+                {cont, NewAcc} ->
+                    NextOffset = Offset + (byte_size(Bin) - byte_size(Rest)),
+                    fold_array(Count - 1, Rest, State1, NextOffset,
+                               Opts, Fun, NewAcc);
+                {halt, Result} -> {ok, Result};
+                _ -> {error, invalid_fold_result}
+            end;
+        {error, _} = Err -> Err
+    end.
+
+unique_requested([], Acc) -> lists:reverse(Acc);
+unique_requested([Key | Rest], Acc) ->
+    case exact_member(Key, Acc) of
+        true -> {error, duplicate_requested_key};
+        false -> unique_requested(Rest, [Key | Acc])
+    end;
+unique_requested(_, _Acc) -> {error, invalid_key_list}.
+
+exact_member(_Key, []) -> false;
+exact_member(Key, [Key1 | _]) when Key =:= Key1 -> true;
+exact_member(Key, [_ | Rest]) -> exact_member(Key, Rest).
+
+take_requested(_Key, [], _Prefix) -> not_found;
+take_requested(Key, [RequestedKey | Rest], Prefix) when Key =:= RequestedKey ->
+    {found, RequestedKey, reverse_append(Prefix, Rest)};
+take_requested(Key, [RequestedKey | Rest], Prefix) ->
+    take_requested(Key, Rest, [RequestedKey | Prefix]).
+
+reverse_append([], Tail) -> Tail;
+reverse_append([Item | Rest], Tail) -> reverse_append(Rest, [Item | Tail]).
+
 valid_partial(#cbor_partial{
     type = Type,
     offset = Offset,
@@ -178,7 +373,7 @@ valid_partial(#cbor_partial{
     valid_type(Type) andalso
     is_integer(Offset) andalso Offset >= 0 andalso
     is_integer(Length) andalso Length >= 1 andalso
-    valid_optional_non_neg(Count) andalso
+    valid_count(Type, Count) andalso
     valid_optional_non_neg(Tag) andalso
     valid_optional_non_neg(Size) andalso
     is_integer(HdrLen) andalso HdrLen >= 1 andalso HdrLen =< Length andalso
@@ -200,6 +395,10 @@ valid_type(tag) -> true;
 valid_type(float) -> true;
 valid_type(simple) -> true;
 valid_type(_) -> false.
+
+valid_count(array, Count) -> is_integer(Count) andalso Count >= 0;
+valid_count(map, Count) -> is_integer(Count) andalso Count >= 0;
+valid_count(_Type, Count) -> Count =:= undefined.
 
 valid_optional_non_neg(undefined) -> true;
 valid_optional_non_neg(Value) -> is_integer(Value) andalso Value >= 0.
@@ -226,11 +425,22 @@ check_string_limits(N, Opts) ->
 
 parse(Bin, State) ->
     Opts = avm_cbor:decode_opts(State),
+    case parse_at(Bin, State, 0, Opts) of
+        {ok, Desc, Rest, _State1} -> {ok, Desc, Rest};
+        {error, _} = Err -> Err
+    end.
+
+parse_at(Bin, State, Offset, Opts) ->
     case parse_item(Bin, State) of
-        {ok, Desc, Rest, _State1} ->
+        {ok, Desc, Rest, State1} ->
             Len = byte_size(Bin) - byte_size(Rest),
             <<Bytes:Len/binary, _/binary>> = Bin,
-            {ok, Desc#cbor_partial{offset = 0, length = Len, bytes = Bytes, opts = Opts}, Rest};
+            {ok, Desc#cbor_partial{
+                offset = Offset,
+                length = Len,
+                bytes = Bytes,
+                opts = Opts
+            }, Rest, State1};
         {error, _} = Err -> Err
     end.
 

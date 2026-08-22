@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+
+- `partial_map_fold/3` and `partial_array_fold/3` for bounded, single-pass
+  traversal of opaque container descriptors with explicit early termination.
+- `partial_select/2`, `partial_map_find/2`, and `partial_array_nth/2` for
+  selective map and array access without deep-decoding unselected values.
+- `encode_with_size/1,2` for returning the encoded binary and its exact size
+  from one encode operation.
+- `encode_sequence/1,2` and `sequence_fold/3` for bounded RFC 8742 sequence
+  production and consumption without requiring a result list.
+- `validate_all/1,2` for validating exactly one complete CBOR item without
+  materializing its nested Erlang value.
+
+### Fixed
+
+- Forged array and map descriptors whose stored count is absent now return the
+  established structured error instead of allowing arithmetic exceptions in
+  traversal helpers.
+
+### Compatibility
+
+- Existing term representations, continuation decoding, options, resource
+  limits, and structured error contracts remain compatible.
+- No runtime dependency, NIF, port, or transport API was added.
+
 ## 0.2.0
 
 First Hex.pm release of package `atomvm_cbor` and OTP application `avm_cbor`.
