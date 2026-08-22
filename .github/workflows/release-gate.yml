@@ -22,7 +22,7 @@ env:
 jobs:
   hygiene:
     name: Public hygiene and secrets
-    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
       performance: ${{ steps.routing.outputs.performance }}
@@ -113,7 +113,7 @@ jobs:
       needs.hygiene.result == 'success' &&
       needs.hygiene.outputs.otp == 'true' &&
       (needs.performance.result == 'success' || needs.performance.result == 'skipped')
-    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -149,7 +149,7 @@ jobs:
       needs.hygiene.result == 'success' &&
       needs.hygiene.outputs.coverage == 'true' &&
       (needs.performance.result == 'success' || needs.performance.result == 'skipped')
-    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout exact source
@@ -185,7 +185,7 @@ jobs:
     name: Previous SemVer performance gate
     needs: hygiene
     if: needs.hygiene.outputs.performance == 'true'
-    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout exact source and historical tags
@@ -220,7 +220,7 @@ jobs:
       needs.hygiene.result == 'success' &&
       needs.hygiene.outputs.atomvm == 'true' &&
       (needs.performance.result == 'success' || needs.performance.result == 'skipped')
-    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout exact source
@@ -252,7 +252,7 @@ jobs:
       needs.hygiene.result == 'success' &&
       needs.hygiene.outputs.esp_idf == 'true' &&
       (needs.performance.result == 'success' || needs.performance.result == 'skipped')
-    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -276,7 +276,7 @@ jobs:
       needs.hygiene.result == 'success' &&
       needs.hygiene.outputs.package == 'true' &&
       (needs.performance.result == 'success' || needs.performance.result == 'skipped')
-    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - name: Checkout exact source
@@ -364,7 +364,7 @@ jobs:
     name: Exact-head release gate
     needs: [hygiene, otp, coverage, performance, atomvm, esp-idf, package]
     if: always()
-    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    runs-on: ubuntu-24.04
     steps:
       - name: Require every selected job and no unselected job
         env:
