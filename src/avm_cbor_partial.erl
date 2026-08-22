@@ -425,8 +425,16 @@ check_string_limits(N, Opts) ->
 
 parse(Bin, State) ->
     Opts = avm_cbor:decode_opts(State),
-    case parse_at(Bin, State, 0, Opts) of
-        {ok, Desc, Rest, _State1} -> {ok, Desc, Rest};
+    case parse_item(Bin, State) of
+        {ok, Desc, Rest, _State1} ->
+            Len = byte_size(Bin) - byte_size(Rest),
+            <<Bytes:Len/binary, _/binary>> = Bin,
+            {ok, Desc#cbor_partial{
+                offset = 0,
+                length = Len,
+                bytes = Bytes,
+                opts = Opts
+            }, Rest};
         {error, _} = Err -> Err
     end.
 

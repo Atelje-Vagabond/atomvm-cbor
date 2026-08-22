@@ -7,8 +7,25 @@ Contributions are welcome when they keep the public repository focused, reproduc
 - Keep changes focused and explain compatibility impact.
 - Add tests for behavior changes and documentation for public API changes.
 - Add or update representative benchmarks for performance-sensitive changes.
+
+### Release benchmark comparison rule
+
+Every release after the first must publish a previous-release comparison for
+each physical board used as release evidence. The report must identify the
+board and configuration, both release versions and source identities, AtomVM
+and SDK versions, harness, payload, iterations, units, statistic, prior and
+current values, change, gate result, and retained-evidence provenance.
+
+Reuse retained comparable measurements when the measured function and harness
+are unchanged; do not rerun device benchmarks merely to regenerate a report.
+Never relabel historical measurements as a different source revision. If
+comparable evidence is missing, stop the release and obtain explicit human
+authorization before running hardware benchmarks again. This comparison is a
+release-blocking requirement before merge, tag, Hex/HexDocs publication, or a
+GitHub release. Existing tags and releases must remain immutable.
 - Include a `Signed-off-by:` trailer (`git commit -s`).
-- Do not include credentials, private infrastructure details, device identities, raw private evidence, or assistant/runtime state.
+- Do not include credentials, private infrastructure identifiers, raw private
+  evidence, or assistant/runtime state.
 
 All required checks must pass on the exact pull-request head. GitHub CI uses only GitHub-hosted runners; no private runner or physical-device access is required.
 
