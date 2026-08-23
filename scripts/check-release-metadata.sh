@@ -112,8 +112,8 @@ if "needs.hygiene.outputs.performance == 'true'" not in performance:
     raise SystemExit("performance must be selected by the changed-path classifier")
 if "github.event.pull_request.head.repo.full_name == github.repository" not in performance:
     raise SystemExit("performance must reject untrusted fork code on the hardware runner")
-if not re.search(r"^    runs-on:\n      group: hw-test$", performance, re.MULTILINE):
-    raise SystemExit("performance must use the canonical hw-test runner group")
+if not re.search(r"^    runs-on:\n      group: public-performance$", performance, re.MULTILINE):
+    raise SystemExit("performance must use the isolated public-performance runner group")
 if "erlang@sha256:d10c0a75dc48c09b76c5a789e49cb1a99896f26880be83ddad2af8e79be99dba" not in performance:
     raise SystemExit("performance must use the pinned OTP 29 container")
 if "--pull=never" not in performance:

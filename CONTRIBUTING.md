@@ -29,9 +29,9 @@ GitHub release. Existing tags and releases must remain immutable.
 
 All required checks must pass on the exact pull-request head. General public
 validation runs on the isolated CI runner pool. The performance gate may use
-the canonical `hw-test` host only for trusted same-repository heads; fork code
-cannot execute there or satisfy the exact-head release gate directly. Public
-validation never requires physical-device access.
+the isolated `public-performance` host only for trusted same-repository heads;
+fork code cannot execute there or satisfy the exact-head release gate directly.
+Public validation never requires physical-device access.
 
 ## Local validation
 

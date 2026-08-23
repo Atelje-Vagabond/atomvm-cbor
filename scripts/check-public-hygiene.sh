@@ -32,7 +32,7 @@ for file in "${existing[@]}"; do
     esac
 done
 if [ "${#runner_files[@]}" -gt 0 ] && grep -InE \
-    'runs-on:[[:space:]]*$|runner[_ -]?group|hw-test' \
+    'runs-on:[[:space:]]*$|runner[_ -]?group|hw-test|public-performance' \
     "${runner_files[@]}"; then
     echo "private runner marker found outside the canonical validation contract" >&2
     exit 1

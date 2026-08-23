@@ -188,7 +188,7 @@ jobs:
       (github.event_name != 'pull_request' ||
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on:
-      group: hw-test
+      group: public-performance
     timeout-minutes: 20
     steps:
       - name: Checkout exact source and historical tags
