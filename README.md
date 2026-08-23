@@ -48,39 +48,34 @@ Mix projects use:
 
 ## Attached-device benchmarks
 
-Lower timings are better. The retained 0.3.0 comparison uses the same CBOR
-payload and AtomVM 0.6.6 harness as 0.2.0. The two ESP32-S3 boards are separate
-devices and are never combined.
+The exact public `0.2.0` and `0.3.0` tags were measured on the same three
+physical devices with AtomVM 0.6.6, identical firmware and harness conditions,
+and five alternating paired captures. Both ESP32-S3 CPUs ran at their supported
+240 MHz upper limit; RP2040 ran at its supported 133 MHz upper limit. Lower
+timings are better.
 
-| Board | 0.2.0 evidence | Exact 0.3.0 evidence |
-|---|:---:|:---:|
-| ESP32-S3 QFN56 rev 0.2, 8 MB PSRAM, serial `5B14099303` | yes | no retained exact capture |
-| WaveShare ESP32-S3-DEV-KIT-N32R16V, 32 MB flash / 16 MB PSRAM, serial `5B61092782` | yes | yes |
-| RP2040 B2, 16 MB flash, flash ID `E460A8534F5C2139` | yes | no |
-| RP2040 B2, 16 MB flash, flash ID `E46254C5C32D122C` | no | yes |
-
-The exact 0.3.0 ESP capture selected WaveShare serial `5B61092782`. Its values
-are therefore compared with the WaveShare 0.2.0 baseline, not with the distinct
-8 MB-PSRAM ESP32-S3 baseline.
+| Board | Exact identity | CPU |
+|---|---|---:|
+| ESP32-S3 N16R8, 16 MiB flash / 8 MiB PSRAM | MAC `1c:db:d4:5b:f5:d0` | 240 MHz |
+| WaveShare ESP32-S3-DEV-KIT-N32R16V, 32 MiB flash / 16 MiB PSRAM | UART serial `5B61092782` | 240 MHz |
+| RP2040 B2, 16 MiB flash | BOOTSEL `E0C9125B0D9B`, flash ID `E46254C5C32D122C` | 133 MHz |
 
 | Board | Function | 0.2.0 µs | 0.3.0 µs | Change |
-|---|---:|---:|---:|---:|
-| WaveShare N32R16V | `encode/1` | 4064.56 | 4033.86 | 0.76% faster |
-| WaveShare N32R16V | `decode/1` | 4600.30 | 4398.26 | 4.39% faster |
-| WaveShare N32R16V | `partial_decode/1` | 7518.24 | 7033.30 | 6.45% faster |
-| WaveShare N32R16V | `partial_decode/2` | 7570.60 | 7088.98 | 6.36% faster |
-| WaveShare N32R16V | `partial_deep_decode/1` | 5911.32 | 6060.34 | 2.52% slower |
-| RP2040 E460… → E462… | `encode/1` | 5118.92 | 5101.78 | N/A — different device |
-| RP2040 E460… → E462… | `decode/1` | 6400.78 | 6386.22 | N/A — different device |
-| RP2040 E460… → E462… | `partial_decode/1` | 9875.48 | 9760.02 | N/A — different device |
-| RP2040 E460… → E462… | `partial_decode/2` | 9928.18 | 9785.46 | N/A — different device |
-| RP2040 E460… → E462… | `partial_deep_decode/1` | 8243.96 | 8153.18 | N/A — different device |
+|---|---|---:|---:|---:|
+| ESP32-S3 N16R8 | `encode/1` | 8849.46 | 8844.02 | 0.06% faster |
+| ESP32-S3 N16R8 | `decode/1` | 10063.52 | 10044.02 | 0.19% faster |
+| ESP32-S3 N16R8 | `partial_decode/1` | 15575.38 | 15575.92 | 0.00% slower |
+| WaveShare N32R16V | `encode/1` | 3507.30 | 3508.00 | 0.02% slower |
+| WaveShare N32R16V | `decode/1` | 3931.22 | 3935.36 | 0.11% slower |
+| WaveShare N32R16V | `partial_decode/1` | 6325.48 | 6327.62 | 0.03% slower |
+| RP2040 E462… | `encode/1` | 4824.60 | 4791.26 | 0.69% faster |
+| RP2040 E462… | `decode/1` | 6082.16 | 6067.22 | 0.25% faster |
+| RP2040 E462… | `partial_decode/1` | 9261.06 | 9346.80 | 0.93% slower |
 
-The full report publishes every descriptor-accessor result, including measured
-regressions, plus host methodology, 40-round soak results, exact device IDs,
-and retained R2 evidence identities. RP2040 percentages are not calculated
-because the retained release captures used different physical boards. See the
-[0.3.0 validation report](docs/benchmarks/0.3.0.md) and the
+The full report publishes all 14 workloads for all three boards, exact host
+results, measured accessor regressions, device and firmware identities,
+40-round retained soak evidence, R2 checksums, and reproduction details. See
+the [0.3.0 validation report](docs/benchmarks/0.3.0.md) and the
 [historical 0.2.0 report](docs/benchmarks/0.2.0.md).
 
 ## Public term representation

@@ -64,9 +64,22 @@ only after those checks and the complete package/coverage/docs preflight pass.
 This prevents an unmerged but previously green PR commit, a moved tag, or an
 unrelated successful check from becoming a publishable release identity.
 
-See the [0.3.0 validation report](benchmarks/0.3.0.md) for the matched host and
-WaveShare N32R16V comparison against 0.2.0. It also distinguishes the separate
-8 MB-PSRAM ESP32-S3, for which no exact 0.3.0 capture is claimed, and the two
-RP2040 devices whose different flash IDs prevent a same-board percentage. The
-[0.2.0 validation report](benchmarks/0.2.0.md) retains the earlier matched
-evidence for both ESP32-S3 boards and the earlier RP2040.
+Hardware release comparisons follow the same rules: compare exact public
+versions on the same physical device, runtime, firmware, clock configuration,
+payload, harness, warmup, and iteration count. Run at the device's documented
+supported clock unless the report explicitly records another operating point.
+Never relabel historical evidence with a different clock or calculate a
+cross-device percentage.
+
+Valid retained captures are the source for release tables. Do not rerun a
+hardware benchmark merely to regenerate documentation or reformat a report.
+A new capture is justified only when required evidence is absent or invalid,
+the code or benchmark changes, or the controlled hardware/runtime
+configuration changes. Preserve the old result as historical evidence when a
+new operating point is introduced.
+
+See the [0.3.0 validation report](benchmarks/0.3.0.md) for the exact-public-tag,
+same-device comparison against 0.2.0 on the ESP32-S3 N16R8, WaveShare N32R16V,
+and RP2040 E462 boards at 240 MHz, 240 MHz, and 133 MHz respectively. The
+[0.2.0 validation report](benchmarks/0.2.0.md) retains the earlier 160 MHz and
+maximum-bound evidence unchanged.
