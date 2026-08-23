@@ -110,6 +110,14 @@ if not re.search(r"^    needs: hygiene$", performance, re.MULTILINE):
     raise SystemExit("performance must run only after hygiene")
 if "needs.hygiene.outputs.performance == 'true'" not in performance:
     raise SystemExit("performance must be selected by the changed-path classifier")
+if "github.event.pull_request.head.repo.full_name == github.repository" not in performance:
+    raise SystemExit("performance must reject untrusted fork code on the hardware runner")
+if not re.search(r"^    runs-on:\n      group: hw-test$", performance, re.MULTILINE):
+    raise SystemExit("performance must use the canonical hw-test runner group")
+if "erlang@sha256:d10c0a75dc48c09b76c5a789e49cb1a99896f26880be83ddad2af8e79be99dba" not in performance:
+    raise SystemExit("performance must use the pinned OTP 29 container")
+if "--pull=never" not in performance:
+    raise SystemExit("performance must not pull a mutable benchmark image")
 if 'BENCHMARK_NOISE_TOLERANCE_PERCENT: "5"' not in performance:
     raise SystemExit("performance regression threshold must remain 5 percent")
 if "scripts/test-semver-baseline-selector.sh" not in performance:

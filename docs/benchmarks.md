@@ -39,6 +39,10 @@ without reserving unrelated compiler or firmware capacity. The final job checks
 that every selected job passed and every unselected job was actually skipped;
 an empty, ambiguous, or inconsistent routing result fails closed.
 
+Trusted same-repository release heads run the performance gate on the canonical
+`hw-test` host with the digest-pinned OTP 29 container already present on that
+runner; the workflow never pulls a mutable image. Fork code cannot execute on
+that runner and therefore cannot satisfy the exact-head release gate directly.
 Each baseline/current measurement starts a fresh Erlang VM with the same single
 normal scheduler plus one dirty CPU and one dirty I/O scheduler. Five runs
 alternate baseline-first and current-first order, then aggregate the run-level

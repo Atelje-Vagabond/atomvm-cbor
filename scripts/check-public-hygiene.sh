@@ -17,9 +17,24 @@ for file in "${files[@]}"; do
     fi
 done
 if [ "${#existing[@]}" -gt 0 ] && grep -InE \
-    'atomvm-cbor-internal|runs-on:[[:space:]]*$|runner[_ -]?group|hw-test|/dev/tty|USB serial|ACTIVE_TASK|NEXT_ACTION|private prompt' \
+    'atomvm-cbor-internal|/dev/tty|USB serial|ACTIVE_TASK|NEXT_ACTION|private prompt' \
     "${existing[@]}"; then
     echo "forbidden internal or device-specific marker found" >&2
+    exit 1
+fi
+
+runner_files=()
+for file in "${existing[@]}"; do
+    case "${file}" in
+        .github/workflows/release-gate.yml|CONTRIBUTING.md|docs/benchmarks.md|scripts/check-release-metadata.sh)
+            ;;
+        *) runner_files+=("${file}") ;;
+    esac
+done
+if [ "${#runner_files[@]}" -gt 0 ] && grep -InE \
+    'runs-on:[[:space:]]*$|runner[_ -]?group|hw-test' \
+    "${runner_files[@]}"; then
+    echo "private runner marker found outside the canonical validation contract" >&2
     exit 1
 fi
 
