@@ -116,6 +116,11 @@ run_tests() ->
     test("decode seq one",           avm_cbor:decode_sequence(<<16#01>>),       {ok, [1], <<>>}),
     test("decode seq trailing",      avm_cbor:decode_sequence(<<1, 2, 16#82, 3>>), {ok, [1, 2], <<16#82, 3>>}),
     test("decode seq item cap",      avm_cbor:decode_sequence(<<1, 2, 3>>, [{max_items, 2}]), {error, {max_items_exceeded, 2}}),
+    test("sequence fold",            avm_cbor:sequence_fold(<<1, 2, 3>>, fun sum_fold/2, 0), {ok, 6, <<>>}),
+    test("encode with size",         avm_cbor:encode_with_size([1, 2]),          {ok, <<16#82, 1, 2>>, 3}),
+    test("encode sequence",          avm_cbor:encode_sequence([1, [2, 3]]),      {ok, <<1, 16#82, 2, 3>>}),
+    test("validate all",             avm_cbor:validate_all(<<16#82, 1, 2>>),     ok),
+    test("validate trailing",        avm_cbor:validate_all(<<1, 2>>),            {error, {trailing_bytes, 1}}),
     test("decode global nested cap", avm_cbor:decode(<<16#82, 16#82, 1, 2, 16#82, 3, 4>>, [{max_items, 6}]), {error, {max_items_exceeded, 6}}),
     test("decode global nested exact", avm_cbor:decode(<<16#82, 16#82, 1, 2, 16#82, 3, 4>>, [{max_items, 7}]), {ok, [[1, 2], [3, 4]], <<>>}),
     test("decode fixed-cost mixed fallback", avm_cbor:decode(<<16#83, 0, 16#18, 24, 16#20>>), {ok, [0, 24, -1], <<>>}),
@@ -203,8 +208,32 @@ partial_tests() ->
     test("partial zero bytes rejected", avm_cbor:partial_decode(<<1>>, [{max_bytes, 0}]), {error, {invalid_option, {max_bytes, 0}}}),
     test("partial deterministic unsorted map", avm_cbor:partial_decode(<<16#A2, 2, 0, 1, 0>>, [{deterministic, true}]), {error, non_deterministic_map_order}),
     test("partial deterministic rejects indef", avm_cbor:partial_decode(<<16#9F, 1, 16#FF>>, [{deterministic, true}]), {error, non_deterministic_indefinite}),
+    test("partial map find",         partial_find_value(<<16#A2, 1, 2, 3, 4>>, 3), {ok, 4}),
+    test("partial array nth",        partial_nth_value(<<16#83, 1, 2, 3>>, 1),    {ok, 2}),
     partial_walk_test(),
     ok.
+
+sum_fold(Item, Acc) -> {cont, Item + Acc}.
+
+partial_find_value(Bin, Key) ->
+    case avm_cbor:partial_decode(Bin) of
+        {ok, Partial, <<>>} ->
+            case avm_cbor:partial_map_find(Partial, Key) of
+                {ok, ValuePartial} -> avm_cbor:partial_deep_decode(ValuePartial);
+                {error, _} = Err -> Err
+            end;
+        Other -> Other
+    end.
+
+partial_nth_value(Bin, Index) ->
+    case avm_cbor:partial_decode(Bin) of
+        {ok, Partial, <<>>} ->
+            case avm_cbor:partial_array_nth(Partial, Index) of
+                {ok, ValuePartial} -> avm_cbor:partial_deep_decode(ValuePartial);
+                {error, _} = Err -> Err
+            end;
+        Other -> Other
+    end.
 
 %% Walk a map, skip the middle value, decode the rest.
 partial_walk_test() ->

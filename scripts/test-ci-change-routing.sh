@@ -36,7 +36,7 @@ done
 
 public_workflow="$(route public .github/workflows/release-gate.yml)"
 for key in performance otp coverage atomvm esp_idf package; do
-    assert_route "${public_workflow}" "${key}" false
+    assert_route "${public_workflow}" "${key}" true
 done
 
 public_coverage="$(route public scripts/branch-coverage.escript scripts/check-coverage.escript)"

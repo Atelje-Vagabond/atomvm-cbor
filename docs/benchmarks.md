@@ -24,18 +24,28 @@ than inferred.
 
 CI always runs public hygiene and changed-path policy first. A newly opened PR
 is classified against its base; later synchronize events use the previous exact
-PR head, so a documentation or workflow-policy follow-up does not replay an
-unchanged runtime suite. Deleted paths are classified, unknown executable paths
-fail closed into the broad validation class, and a tag, manual run, or missing
-comparison history selects the complete chain.
+PR head, so a documentation-only follow-up does not replay an unchanged runtime
+suite. Workflow-definition changes are the exception: they
+select the complete chain so a changed gate proves its own scheduling and
+conclusions. Deleted paths are classified, unknown executable paths fail closed
+into the broad validation class, and a tag, manual run, or missing comparison
+history selects the complete chain.
 
-When runtime or benchmark paths select performance, that gate runs alone after
-hygiene. Only after the unchanged +5% regression limit passes do the other
-selected OTP, coverage, AtomVM, ESP-IDF, and package jobs fan out across the two
+When runtime or benchmark paths select performance, that gate runs after
+hygiene in parallel with the OTP 25, 27, and 29 compatibility matrix. OTP
+validation is therefore reported even when the OTP 29 performance comparison
+fails. Only after the unchanged +5% regression limit passes do the other
+selected coverage, AtomVM, ESP-IDF, and package jobs fan out across the two
 self-hosted runners. Documentation/release-note changes select the package job
 without reserving unrelated compiler or firmware capacity. The final job checks
 that every selected job passed and every unselected job was actually skipped;
 an empty, ambiguous, or inconsistent routing result fails closed.
+
+Trusted same-repository release heads run the performance gate on the canonical
+isolated `public-performance` host with the digest-pinned OTP 29 container
+already present on that runner; the workflow never pulls a mutable image. Fork
+code cannot execute on that runner and therefore cannot satisfy the exact-head
+release gate directly.
 
 Each baseline/current measurement starts a fresh Erlang VM with the same single
 normal scheduler plus one dirty CPU and one dirty I/O scheduler. Five runs

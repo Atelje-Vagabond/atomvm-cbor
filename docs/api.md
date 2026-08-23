@@ -20,8 +20,15 @@ python3 scripts/gen-api-docs.py
 | `decode_all/2` | Decode a complete CBOR sequence using explicit options. |
 | `decode_sequence/1` | Decode as many complete CBOR items as possible using default options. |
 | `decode_sequence/2` | Decode as many complete CBOR items as possible using explicit options. |
+| `sequence_fold/3` | TODO document this function. |
 | `encode/1` | Encode one supported Erlang value using default options. |
 | `encode/2` | Encode one supported Erlang value using explicit options. |
+| `encode_with_size/1` | TODO document this function. |
+| `encode_with_size/2` | TODO document this function. |
+| `encode_sequence/1` | TODO document this function. |
+| `encode_sequence/2` | TODO document this function. |
+| `validate_all/1` | TODO document this function. |
+| `validate_all/2` | TODO document this function. |
 | `partial_decode/1` | Validate and measure one CBOR item without eagerly constructing nested terms. |
 | `partial_decode/2` | Partially decode one CBOR item using explicit options. |
 | `partial_value_bytes/1` | Return the complete encoded bytes represented by a partial descriptor. |
@@ -34,6 +41,11 @@ python3 scripts/gen-api-docs.py
 | `partial_offset/1` | Return the descriptor item offset. |
 | `partial_length/1` | Return the complete encoded length of a descriptor item. |
 | `partial_contents/1` | Return encoded child bytes for an array, map, or tag. |
+| `partial_map_fold/3` | TODO document this function. |
+| `partial_array_fold/3` | TODO document this function. |
+| `partial_select/2` | TODO document this function. |
+| `partial_map_find/2` | TODO document this function. |
+| `partial_array_nth/2` | TODO document this function. |
 | `get/2` | Look up a key in a decoded CBOR map. |
 | `get/3` | Look up a key in a decoded CBOR map with a default. |
 | `require/2` | Require a key in a decoded CBOR map. |
@@ -189,6 +201,24 @@ Like decode_sequence/1, but applies caller-provided limits and feature flags.
 
 It does not hide malformed data; malformed items still return errors.
 
+### `sequence_fold/3`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+sequence_fold(term(), term(), term()) -> {ok, term(), binary()} | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
+
 ### `encode/1`
 
 Encode one supported Erlang value using default options.
@@ -224,6 +254,114 @@ Supports preferred and deterministic serialization while enforcing caller-provid
 **What it is not**
 
 It does not support arbitrary Erlang terms outside the documented representation.
+
+### `encode_with_size/1`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+encode_with_size(term()) -> {ok, binary(), non_neg_integer()} | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
+
+### `encode_with_size/2`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+encode_with_size(term(), term()) -> {ok, binary(), non_neg_integer()} | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
+
+### `encode_sequence/1`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+encode_sequence(term()) -> {ok, binary()} | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
+
+### `encode_sequence/2`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+encode_sequence(term(), term()) -> {ok, binary()} | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
+
+### `validate_all/1`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+validate_all(term()) -> ok | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
+
+### `validate_all/2`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+validate_all(term(), term()) -> ok | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
 
 ### `partial_decode/1`
 
@@ -440,6 +578,96 @@ The returned binary can be walked with repeated partial_decode calls.
 **What it is not**
 
 It does not deep-decode the children.
+
+### `partial_map_fold/3`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+partial_map_fold(term(), fun((term(), term(), term()) -> {cont, term()} | {halt, term()}), term()) -> {ok, term()} | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
+
+### `partial_array_fold/3`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+partial_array_fold(term(), fun((term(), term()) -> {cont, term()} | {halt, term()}), term()) -> {ok, term()} | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
+
+### `partial_select/2`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+partial_select(term(), term()) -> {ok, [{term(), term()}], [term()]} | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
+
+### `partial_map_find/2`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+partial_map_find(term(), term()) -> {ok, term()} | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
+
+### `partial_array_nth/2`
+
+TODO document this function.
+
+**Spec**
+
+```erlang
+partial_array_nth(term(), term()) -> {ok, term()} | {error, term()}
+```
+
+**What it does**
+
+TODO
+
+**What it is not**
+
+TODO
 
 ### `get/2`
 

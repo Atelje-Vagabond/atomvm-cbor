@@ -63,4 +63,18 @@ write_result "${baseline}" baseline false 0 0
 write_result "${fixed}" fixed true 500 500
 run_compare "${baseline}" "${fixed}" unavailable-baseline
 
+runtime_probe="${fixture_root}/runtime-probe"
+mkdir -p "${runtime_probe}/bin" "${runtime_probe}/scripts"
+cp "${repo_root}/scripts/benchmark-remediation.sh" "${runtime_probe}/scripts/"
+printf '#!/usr/bin/env bash\nprintf "27"\n' > "${runtime_probe}/bin/erl"
+chmod +x "${runtime_probe}/bin/erl"
+if PATH="${runtime_probe}/bin:${PATH}" \
+    bash "${runtime_probe}/scripts/benchmark-remediation.sh" \
+    >"${runtime_probe}/wrong-otp.log" 2>&1; then
+    echo "release benchmark must reject a non-OTP-29 runtime" >&2
+    exit 1
+fi
+grep -F 'release benchmark requires OTP 29, found 27' \
+    "${runtime_probe}/wrong-otp.log"
+
 echo "Benchmark regression gate tests passed."

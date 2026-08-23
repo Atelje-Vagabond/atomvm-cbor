@@ -26,6 +26,8 @@ run_coverage() ->
         {decode_errors, fun test_decode_errors/0},
         {decode_indefinite, fun test_decode_indefinite/0},
         {decode_sequence, fun test_decode_sequence/0},
+        {sequence_fold, fun test_sequence_fold/0},
+        {validate_all, fun test_validate_all/0},
         {encode_unsigned_integers, fun test_encode_unsigned_integers/0},
         {encode_negative_integers, fun test_encode_negative_integers/0},
         {encode_byte_strings, fun test_encode_byte_strings/0},
@@ -36,6 +38,8 @@ run_coverage() ->
         {encode_deterministic_nested_maps, fun test_encode_deterministic_nested_maps/0},
         {encode_simple_values, fun test_encode_simple_values/0},
         {encode_roundtrip, fun test_encode_roundtrip/0},
+        {encode_with_size, fun test_encode_with_size/0},
+        {encode_sequence, fun test_encode_sequence/0},
         {helpers, fun test_helpers/0},
         {option_validation, fun test_option_validation/0},
         {preferred_serialization, fun preferred_serialization/0},
@@ -546,6 +550,38 @@ test_encode_roundtrip() ->
     assert(0.0, decode_ok(ZBits)),
     ok.
 
+test_encode_with_size() ->
+    Value = {map, [{{text, <<"sensor">>}, [1, 2, 3]}, {0, true}]},
+    {ok, Expected} = avm_cbor:encode(Value),
+    assert({ok, Expected, byte_size(Expected)}, avm_cbor:encode_with_size(Value)),
+    Opts = [{deterministic, true}, {preferred, true}],
+    {ok, Deterministic} = avm_cbor:encode(Value, Opts),
+    assert({ok, Deterministic, byte_size(Deterministic)},
+           avm_cbor:encode_with_size(Value, Opts)),
+    assert(avm_cbor:encode(not_supported), avm_cbor:encode_with_size(not_supported)),
+    assert({error, invalid_options_list},
+           avm_cbor:encode_with_size(Value, invalid_options)),
+    ok.
+
+test_encode_sequence() ->
+    Values = [1, {text, <<"a">>}, [2, 3]],
+    Expected = <<1, 16#61, "a", 16#82, 2, 3>>,
+    assert({ok, <<>>}, avm_cbor:encode_sequence([])),
+    assert({ok, Expected}, avm_cbor:encode_sequence(Values)),
+    {ok, Decoded} = avm_cbor:decode_all(Expected),
+    assert(Values, Decoded),
+    assert({error, {max_bytes_exceeded, 2}},
+           avm_cbor:encode_sequence([1, 2, 3], [{max_bytes, 2}])),
+    assert({error, {max_items_exceeded, 2}},
+           avm_cbor:encode_sequence([1, 2, 3], [{max_items, 2}])),
+    assert({error, invalid_input}, avm_cbor:encode_sequence(not_a_list)),
+    assert({error, invalid_input}, avm_cbor:encode_sequence([1 | improper_tail])),
+    assert({error, invalid_options_list},
+           avm_cbor:encode_sequence([1], invalid_options)),
+    assert(avm_cbor:encode(not_supported),
+           avm_cbor:encode_sequence([not_supported])),
+    ok.
+
 %%--------------------------------------------------------------------
 %% Option validation
 %%--------------------------------------------------------------------
@@ -780,6 +816,39 @@ test_decode_sequence() ->
     {error, unexpected_break} = avm_cbor:decode_sequence(<<16#01, 16#FF>>),
     %% decode_sequence with options
     {error, {invalid_option, _}} = avm_cbor:decode_sequence(<<16#01>>, [bad_option]),
+    ok.
+
+test_sequence_fold() ->
+    Sum = fun(Item, Acc) -> {cont, Item + Acc} end,
+    assert({ok, 6, <<>>}, avm_cbor:sequence_fold(<<1, 2, 3>>, Sum, 0)),
+    Halt = fun(Item, Acc) when Item =:= 2 -> {halt, Acc + Item};
+              (Item, Acc) -> {cont, Acc + Item}
+           end,
+    assert({ok, 3, <<3>>}, avm_cbor:sequence_fold(<<1, 2, 3>>, Halt, 0)),
+    assert({ok, 1, <<16#82, 2>>},
+           avm_cbor:sequence_fold(<<1, 16#82, 2>>, Sum, 0)),
+    assert({error, unexpected_break},
+           avm_cbor:sequence_fold(<<1, 16#FF>>, Sum, 0)),
+    BadResult = fun(_Item, _Acc) -> invalid end,
+    assert({error, invalid_fold_result},
+           avm_cbor:sequence_fold(<<1>>, BadResult, 0)),
+    assert({error, invalid_callback},
+           avm_cbor:sequence_fold(<<1>>, not_a_function, 0)),
+    assert({error, invalid_input},
+           avm_cbor:sequence_fold(not_a_binary, Sum, 0)),
+    ok.
+
+test_validate_all() ->
+    Valid = <<16#A1, 1, 16#82, 2, 3>>,
+    assert(ok, avm_cbor:validate_all(Valid)),
+    assert({error, empty}, avm_cbor:validate_all(<<>>)),
+    assert({error, truncated}, avm_cbor:validate_all(<<16#82, 1>>)),
+    assert({error, {trailing_bytes, 2}}, avm_cbor:validate_all(<<1, 2, 3>>)),
+    assert({error, {non_preferred_argument, 1}},
+           avm_cbor:validate_all(<<16#18, 1>>, [{preferred, true}])),
+    assert({error, invalid_options_list},
+           avm_cbor:validate_all(Valid, invalid_options)),
+    assert({error, invalid_input}, avm_cbor:validate_all(not_a_binary)),
     ok.
 
 %%--------------------------------------------------------------------

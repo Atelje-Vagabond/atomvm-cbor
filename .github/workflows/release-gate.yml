@@ -107,18 +107,17 @@ jobs:
 
   otp:
     name: OTP validation
-    needs: [hygiene, performance]
+    needs: hygiene
     if: >-
       always() &&
       needs.hygiene.result == 'success' &&
-      needs.hygiene.outputs.otp == 'true' &&
-      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
+      needs.hygiene.outputs.otp == 'true'
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        otp: ["25", "27"]
+        otp: ["25", "27", "29"]
     steps:
       - name: Checkout exact source
         uses: actions/checkout@v7.0.1
@@ -184,8 +183,12 @@ jobs:
   performance:
     name: Previous SemVer performance gate
     needs: hygiene
-    if: needs.hygiene.outputs.performance == 'true'
-    runs-on: [self-hosted, Linux, X64, atelje-cloud]
+    if: >-
+      needs.hygiene.outputs.performance == 'true' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on:
+      group: public-performance
     timeout-minutes: 20
     steps:
       - name: Checkout exact source and historical tags
@@ -195,22 +198,41 @@ jobs:
           fetch-depth: 0
       - name: Assert exact checkout
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
-      - name: Install Erlang
-        uses: erlef/setup-beam@v1.24.1
-        with:
-          otp-version: "29"
       - name: Prove fail-closed threshold behavior
         run: |
-          bash scripts/test-benchmark-regression-gate.sh
-          bash scripts/test-semver-baseline-selector.sh
+          set -euo pipefail
+          image="erlang@sha256:d10c0a75dc48c09b76c5a789e49cb1a99896f26880be83ddad2af8e79be99dba"
+          docker image inspect "${image}" >/dev/null
+          docker run --rm --pull=never \
+            -v "${GITHUB_WORKSPACE}:/project:ro" \
+            -w /project \
+            "${image}" \
+            bash -lc 'set -euo pipefail
+              bash scripts/test-benchmark-regression-gate.sh
+              bash scripts/test-semver-baseline-selector.sh'
       - name: Select and compare exact reachable SemVer baseline
         env:
           BENCHMARK_NOISE_TOLERANCE_PERCENT: "5"
           BENCHMARK_RUNS: "5"
         run: |
           set -euo pipefail
-          bash scripts/benchmark-remediation.sh 2>&1 | tee /tmp/performance-gate.log
-          grep -F 'PERFORMANCE_GATE_OK noise_tolerance_percent=5.00' /tmp/performance-gate.log
+          image="erlang@sha256:d10c0a75dc48c09b76c5a789e49cb1a99896f26880be83ddad2af8e79be99dba"
+          docker image inspect "${image}" >/dev/null
+          docker run --rm --pull=never \
+            -e BENCHMARK_NOISE_TOLERANCE_PERCENT \
+            -e BENCHMARK_RUNS \
+            -v "${GITHUB_WORKSPACE}:/project:ro" \
+            -w /project \
+            "${image}" \
+            bash -lc 'set -euo pipefail
+              validation_dir="$(mktemp -d)"
+              tar -C /project --exclude=./_build --exclude=./ebin -cf - . | tar -C "${validation_dir}" -xf -
+              cd "${validation_dir}"
+              git config --global --add safe.directory "${validation_dir}"
+              git config --global --add safe.directory /project/.git
+              git remote set-url origin file:///project
+              bash scripts/benchmark-remediation.sh 2>&1 | tee /tmp/performance-gate.log
+              grep -F "PERFORMANCE_GATE_OK noise_tolerance_percent=5.00" /tmp/performance-gate.log'
 
   atomvm:
     name: AtomVM 0.6.6

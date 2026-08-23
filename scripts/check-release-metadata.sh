@@ -110,6 +110,14 @@ if not re.search(r"^    needs: hygiene$", performance, re.MULTILINE):
     raise SystemExit("performance must run only after hygiene")
 if "needs.hygiene.outputs.performance == 'true'" not in performance:
     raise SystemExit("performance must be selected by the changed-path classifier")
+if "github.event.pull_request.head.repo.full_name == github.repository" not in performance:
+    raise SystemExit("performance must reject untrusted fork code on the hardware runner")
+if not re.search(r"^    runs-on:\n      group: public-performance$", performance, re.MULTILINE):
+    raise SystemExit("performance must use the isolated public-performance runner group")
+if "erlang@sha256:d10c0a75dc48c09b76c5a789e49cb1a99896f26880be83ddad2af8e79be99dba" not in performance:
+    raise SystemExit("performance must use the pinned OTP 29 container")
+if "--pull=never" not in performance:
+    raise SystemExit("performance must not pull a mutable benchmark image")
 if 'BENCHMARK_NOISE_TOLERANCE_PERCENT: "5"' not in performance:
     raise SystemExit("performance regression threshold must remain 5 percent")
 if "scripts/test-semver-baseline-selector.sh" not in performance:
@@ -117,6 +125,8 @@ if "scripts/test-semver-baseline-selector.sh" not in performance:
 
 benchmark_script = Path("scripts/benchmark-remediation.sh").read_text(encoding="utf-8")
 for required in (
+    'if [ "${benchmark_otp}" != "29" ]',
+    "PERFORMANCE_RUNTIME otp=%s",
     "git archive \"${baseline_tag}\" src",
     "PERFORMANCE_BASELINE_CAPABILITIES",
     "erl +S 1:1 +SDcpu 1:1 +SDio 1",
@@ -126,7 +136,17 @@ for required in (
     if required not in benchmark_script:
         raise SystemExit(f"dynamic/stable benchmark invariant is missing: {required}")
 
-for name in ("otp", "coverage", "atomvm", "esp-idf", "package"):
+otp = job("otp")
+if not re.search(r"^    needs: hygiene$", otp, re.MULTILINE):
+    raise SystemExit("otp must run independently after hygiene")
+if "needs.hygiene.outputs.otp == 'true'" not in otp:
+    raise SystemExit("otp must be selected by the changed-path classifier")
+if 'otp: ["25", "27", "29"]' not in otp:
+    raise SystemExit("otp compatibility matrix must cover 25, 27, and 29")
+if "needs.performance.result" in otp:
+    raise SystemExit("otp must not be skipped when selected performance fails")
+
+for name in ("coverage", "atomvm", "esp-idf", "package"):
     body = job(name)
     if not re.search(r"^    needs: \[hygiene, performance\]$", body, re.MULTILINE):
         raise SystemExit(f"{name} must depend on hygiene and performance")

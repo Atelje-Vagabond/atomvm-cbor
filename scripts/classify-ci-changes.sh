@@ -82,7 +82,10 @@ classify_public() {
         .github/workflows/publish-hex.yml|.github/releases/*|docs/*|README.md|CHANGELOG.md|LICENSE|hex_metadata.config|scripts/gen-api-docs.py|scripts/check-hex-package.sh|scripts/release-check.sh|scripts/read-release-version.py|scripts/verify-hex-release.py)
             package=true
             ;;
-        .github/workflows/release-gate.yml|scripts/classify-ci-changes.sh|scripts/test-ci-change-routing.sh|scripts/check-release-metadata.sh|scripts/check-public-hygiene.sh|scripts/source-integrity.sha256)
+        .github/workflows/release-gate.yml)
+            mark_public_runtime
+            ;;
+        scripts/classify-ci-changes.sh|scripts/test-ci-change-routing.sh|scripts/check-release-metadata.sh|scripts/check-public-hygiene.sh|scripts/source-integrity.sha256)
             # The always-on hygiene job validates routing and workflow policy.
             ;;
         *.erl|*.hrl)

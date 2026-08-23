@@ -4,6 +4,14 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repo_root}"
 
+benchmark_otp="$(erl -noshell -eval \
+    'io:format("~s", [erlang:system_info(otp_release)]), halt().')"
+if [ "${benchmark_otp}" != "29" ]; then
+    echo "release benchmark requires OTP 29, found ${benchmark_otp}" >&2
+    exit 1
+fi
+printf 'PERFORMANCE_RUNTIME otp=%s\n' "${benchmark_otp}"
+
 git fetch --tags
 
 selection="$(python3 scripts/select-semver-baseline.py)"
@@ -42,7 +50,7 @@ find "${baseline_dir}/src" -maxdepth 1 -type f \
 baseline_sources=("${baseline_dir}"/src/*.erl)
 erlc -Wall -I "${baseline_dir}/src" -o "${baseline_dir}/ebin" \
     "${baseline_sources[@]}"
-read -r baseline_has_partial baseline_has_deterministic < <(
+read -r baseline_has_partial baseline_has_deterministic baseline_has_benefit_apis < <(
     "${erl_benchmark[@]}" -noshell -pa "${baseline_dir}/ebin" -eval '
         Exports = avm_cbor:module_info(exports),
         HasPartial = lists:member({partial_decode, 1}, Exports),
@@ -51,11 +59,18 @@ read -r baseline_has_partial baseline_has_deterministic < <(
             {error, non_deterministic_indefinite} -> true;
             _ -> false
         end,
-        io:format("~p ~p~n", [HasPartial, HasDeterministic]),
+        HasBenefitApis = lists:all(
+            fun(Export) -> lists:member(Export, Exports) end,
+            [{encode_with_size, 1}, {encode_sequence, 1}, {sequence_fold, 3},
+             {validate_all, 1}, {partial_map_fold, 3}, {partial_array_fold, 3},
+             {partial_select, 2}, {partial_map_find, 2}, {partial_array_nth, 2}]
+        ),
+        io:format("~p ~p ~p~n", [HasPartial, HasDeterministic, HasBenefitApis]),
         halt().'
 )
-printf 'PERFORMANCE_BASELINE_CAPABILITIES partial=%s deterministic=%s\n' \
-    "${baseline_has_partial}" "${baseline_has_deterministic}"
+printf 'PERFORMANCE_BASELINE_CAPABILITIES partial=%s deterministic=%s benefit_apis=%s\n' \
+    "${baseline_has_partial}" "${baseline_has_deterministic}" \
+    "${baseline_has_benefit_apis}"
 
 baseline_defines=()
 if [ "${baseline_has_partial}" = true ]; then
@@ -64,9 +79,12 @@ fi
 if [ "${baseline_has_deterministic}" = true ]; then
     baseline_defines+=(-DHAS_DETERMINISTIC)
 fi
+if [ "${baseline_has_benefit_apis}" = true ]; then
+    baseline_defines+=(-DHAS_BENEFIT_APIS)
+fi
 erlc -Wall -I "${baseline_dir}/src" "${baseline_defines[@]}" \
     -o "${baseline_dir}/ebin" bench/remediation_benchmark.erl
-erlc -Wall -I src -DHAS_PARTIAL -DHAS_DETERMINISTIC \
+erlc -Wall -I src -DHAS_PARTIAL -DHAS_DETERMINISTIC -DHAS_BENEFIT_APIS \
     -o "${fixed_dir}/ebin" \
     src/avm_cbor.erl src/avm_cbor_cont.erl src/avm_cbor_partial.erl \
     bench/remediation_benchmark.erl
