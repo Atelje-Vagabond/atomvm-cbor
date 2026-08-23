@@ -4,6 +4,14 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repo_root}"
 
+benchmark_otp="$(erl -noshell -eval \
+    'io:format("~s", [erlang:system_info(otp_release)]), halt().')"
+if [ "${benchmark_otp}" != "29" ]; then
+    echo "release benchmark requires OTP 29, found ${benchmark_otp}" >&2
+    exit 1
+fi
+printf 'PERFORMANCE_RUNTIME otp=%s\n' "${benchmark_otp}"
+
 git fetch --tags
 
 selection="$(python3 scripts/select-semver-baseline.py)"

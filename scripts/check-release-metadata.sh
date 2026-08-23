@@ -125,6 +125,8 @@ if "scripts/test-semver-baseline-selector.sh" not in performance:
 
 benchmark_script = Path("scripts/benchmark-remediation.sh").read_text(encoding="utf-8")
 for required in (
+    'if [ "${benchmark_otp}" != "29" ]',
+    "PERFORMANCE_RUNTIME otp=%s",
     "git archive \"${baseline_tag}\" src",
     "PERFORMANCE_BASELINE_CAPABILITIES",
     "erl +S 1:1 +SDcpu 1:1 +SDio 1",
