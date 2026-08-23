@@ -20,6 +20,13 @@ internal_contract_boundaries_test() ->
     State = avm_cbor:new_decode_state(Opts),
     ?assertEqual(ok, avm_cbor:check_string_byte_limit(1,
         Opts#cbor_opts{max_string_bytes = 0})),
+    UnlimitedStringState = State#cbor_decode_state{
+        opts = Opts#cbor_opts{max_string_bytes = 0}
+    },
+    ?assertMatch(
+        {ok, <<"a">>, <<>>, #cbor_decode_state{}},
+        avm_cbor:byte_string(1, <<"a">>, UnlimitedStringState)
+    ),
     ?assertError(function_clause, avm_cbor:consume_nodes(-1, State)),
     ?assertError(function_clause, avm_cbor:ensure_node_budget(-1, State)),
     ?assertError(function_clause, avm_cbor:consume_string_bytes(-1, State)),

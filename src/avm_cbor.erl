@@ -660,6 +660,15 @@ arg(30, _) -> {error, reserved_additional_info};
 arg(31, _) -> {error, reserved_additional_info};
 arg(_, _) -> {error, truncated}.
 
+byte_string(N, Bin,
+            State = #cbor_decode_state{
+                opts = #cbor_opts{max_string_bytes = Limit},
+                string_bytes_left = Left
+            })
+  when N =< Limit, N =< Left, byte_size(Bin) >= N ->
+    <<Chunk:N/binary, Rest/binary>> = Bin,
+    {ok, Chunk, Rest,
+     State#cbor_decode_state{string_bytes_left = Left - N}};
 byte_string(N, Bin, State) ->
     Opts = decode_opts(State),
     case check_string_byte_limit(N, Opts) of
