@@ -8,6 +8,8 @@ fi
 
 package_dir="$1"
 test -d "${package_dir}"
+release_version="$(python3 scripts/read-release-version.py)"
+release_manifest="docs/benchmarks/data/${release_version}.json"
 
 benchmark_reports=()
 for candidate in docs/benchmarks/*.md; do
@@ -24,7 +26,7 @@ for required in \
     src/avm_cbor.erl src/avm_cbor_cont.erl src/avm_cbor_partial.erl src/avm_cbor_opts.hrl \
     src/avm_cbor.app.src rebar.config VERSION README.md CHANGELOG.md \
     LICENSE docs/api.md docs/decoder-policy.md docs/atomvm-memory-internals.md \
-    docs/benchmarks.md "${benchmark_reports[@]}"; do
+    docs/benchmarks.md "${release_manifest}" "${benchmark_reports[@]}"; do
     test -s "${package_dir}/${required}"
 done
 
@@ -52,6 +54,7 @@ FILES
 for benchmark_report in "${benchmark_reports[@]}"; do
     printf '%s\n' "${benchmark_report}" >> "${expected}"
 done
+printf '%s\n' "${release_manifest}" >> "${expected}"
 sort -o "${expected}" "${expected}"
 if ! diff -u "${expected}" "${actual}"; then
     echo 'FAIL: Hex package file list differs from the allowlist.' >&2
