@@ -54,28 +54,27 @@ and five alternating paired captures. Both ESP32-S3 CPUs ran at their supported
 240 MHz upper limit; RP2040 ran at its supported 133 MHz upper limit. Lower
 timings are better.
 
+<!-- release-evidence:readme-identities:start -->
 | Board | Exact identity | CPU |
 |---|---|---:|
-| ESP32-S3 N16R8, 16 MiB flash / 8 MiB PSRAM | MAC `1c:db:d4:5b:f5:d0` | 240 MHz |
-| WaveShare ESP32-S3-DEV-KIT-N32R16V, 32 MiB flash / 16 MiB PSRAM | UART serial `5B61092782` | 240 MHz |
-| RP2040 B2, 16 MiB flash | BOOTSEL `E0C9125B0D9B`, flash ID `E46254C5C32D122C` | 133 MHz |
+| ESP32-S3 N16R8 | QFN56 rev 0.2, MAC `1c:db:d4:5b:f5:d0`, native USB identifier `1C:DB:D4:5B:F5:D0` | 240 MHz |
+| WaveShare N32R16V | ESP32-S3-DEV-KIT-N32R16V, MAC `90:e5:b1:d8:48:b0`, CH340 UART serial `5B61092782` | 240 MHz |
+| RP2040 E462… | RP2040 B2, BOOTSEL serial `E0C9125B0D9B`, flash ID `E46254C5C32D122C` | 133 MHz |
+<!-- release-evidence:readme-identities:end -->
 
-| Board | Function | 0.2.0 µs | 0.3.0 µs | Change |
-|---|---|---:|---:|---:|
-| ESP32-S3 N16R8 | `encode/1` | 8849.46 | 8844.02 | 0.06% faster |
-| ESP32-S3 N16R8 | `decode/1` | 10063.52 | 10044.02 | 0.19% faster |
-| ESP32-S3 N16R8 | `partial_decode/1` | 15575.38 | 15575.92 | 0.00% slower |
-| WaveShare N32R16V | `encode/1` | 3507.30 | 3508.00 | 0.02% slower |
-| WaveShare N32R16V | `decode/1` | 3931.22 | 3935.36 | 0.11% slower |
-| WaveShare N32R16V | `partial_decode/1` | 6325.48 | 6327.62 | 0.03% slower |
-| RP2040 E462… | `encode/1` | 4824.60 | 4791.26 | 0.69% faster |
-| RP2040 E462… | `decode/1` | 6082.16 | 6067.22 | 0.25% faster |
-| RP2040 E462… | `partial_decode/1` | 9261.06 | 9346.80 | 0.93% slower |
+<!-- release-evidence:readme-summary:start -->
+| Function | ESP32-S3 N16R8 0.2.0 µs | 0.3.0 µs | Change | WaveShare N32R16V 0.2.0 µs | 0.3.0 µs | Change | RP2040 E462… 0.2.0 µs | 0.3.0 µs | Change |
+| :--- | ---: | ---: | :--- | ---: | ---: | :--- | ---: | ---: | :--- |
+| `encode/1` | 8849.46 | 8844.02 | 0.06% faster | 3507.30 | 3508.00 | 0.02% slower | 4824.60 | 4791.26 | 0.69% faster |
+| `decode/1` | 10063.52 | 10044.02 | 0.19% faster | 3931.22 | 3935.36 | 0.11% slower | 6082.16 | 6067.22 | 0.25% faster |
+| `partial_decode/1` | 15575.38 | 15575.92 | 0.00% slower | 6325.48 | 6327.62 | 0.03% slower | 9261.06 | 9346.80 | 0.93% slower |
+<!-- release-evidence:readme-summary:end -->
 
-The full report publishes all 14 workloads for all three boards, exact host
-results, measured accessor regressions, device and firmware identities,
-40-round retained soak evidence, R2 checksums, and reproduction details. See
-the [0.3.0 validation report](docs/benchmarks/0.3.0.md) and the
+The full report publishes all 14 comparable workloads and all nine 0.3.0-only
+workloads for every board, exact host results, measured accessor regressions,
+device and firmware identities, three-device 40-round soak evidence, evidence
+checksums, and reproduction details. See the
+[0.3.0 validation report](docs/benchmarks/0.3.0.md) and the
 [historical 0.2.0 report](docs/benchmarks/0.2.0.md).
 
 ## Public term representation

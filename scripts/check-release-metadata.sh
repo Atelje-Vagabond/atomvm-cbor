@@ -200,4 +200,6 @@ for required in \
     test -s "${required}"
 done
 
+python3 scripts/release-evidence.py
+
 echo 'Release metadata and runtime integrity checks passed.'
