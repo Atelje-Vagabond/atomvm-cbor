@@ -64,5 +64,8 @@ only after those checks and the complete package/coverage/docs preflight pass.
 This prevents an unmerged but previously green PR commit, a moved tag, or an
 unrelated successful check from becoming a publishable release identity.
 
-See the [0.2.0 validation report](benchmarks/0.2.0.md) for the matched host,
-ESP32-S3, and RP2040 evidence.
+See the [0.3.0 validation report](benchmarks/0.3.0.md) for the matched host,
+WaveShare N32R16V, and RP2040 comparison against 0.2.0. It also distinguishes
+the separate 8 MB-PSRAM ESP32-S3, for which no exact 0.3.0 capture is claimed.
+The [0.2.0 validation report](benchmarks/0.2.0.md) retains the earlier matched
+evidence for both ESP32-S3 boards and the RP2040.
