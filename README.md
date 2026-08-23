@@ -56,7 +56,8 @@ devices and are never combined.
 |---|:---:|:---:|
 | ESP32-S3 QFN56 rev 0.2, 8 MB PSRAM, serial `5B14099303` | yes | no retained exact capture |
 | WaveShare ESP32-S3-DEV-KIT-N32R16V, 32 MB flash / 16 MB PSRAM, serial `5B61092782` | yes | yes |
-| RP2040 B2, 16 MB flash, flash ID `E460A8534F5C2139` | yes | yes |
+| RP2040 B2, 16 MB flash, flash ID `E460A8534F5C2139` | yes | no |
+| RP2040 B2, 16 MB flash, flash ID `E46254C5C32D122C` | no | yes |
 
 The exact 0.3.0 ESP capture selected WaveShare serial `5B61092782`. Its values
 are therefore compared with the WaveShare 0.2.0 baseline, not with the distinct
@@ -69,16 +70,18 @@ are therefore compared with the WaveShare 0.2.0 baseline, not with the distinct
 | WaveShare N32R16V | `partial_decode/1` | 7518.24 | 7033.30 | 6.45% faster |
 | WaveShare N32R16V | `partial_decode/2` | 7570.60 | 7088.98 | 6.36% faster |
 | WaveShare N32R16V | `partial_deep_decode/1` | 5911.32 | 6060.34 | 2.52% slower |
-| RP2040 | `encode/1` | 5118.92 | 5101.78 | 0.33% faster |
-| RP2040 | `decode/1` | 6400.78 | 6386.22 | 0.23% faster |
-| RP2040 | `partial_decode/1` | 9875.48 | 9760.02 | 1.17% faster |
-| RP2040 | `partial_decode/2` | 9928.18 | 9785.46 | 1.44% faster |
-| RP2040 | `partial_deep_decode/1` | 8243.96 | 8153.18 | 1.10% faster |
+| RP2040 E460… → E462… | `encode/1` | 5118.92 | 5101.78 | N/A — different device |
+| RP2040 E460… → E462… | `decode/1` | 6400.78 | 6386.22 | N/A — different device |
+| RP2040 E460… → E462… | `partial_decode/1` | 9875.48 | 9760.02 | N/A — different device |
+| RP2040 E460… → E462… | `partial_decode/2` | 9928.18 | 9785.46 | N/A — different device |
+| RP2040 E460… → E462… | `partial_deep_decode/1` | 8243.96 | 8153.18 | N/A — different device |
 
 The full report publishes every descriptor-accessor result, including measured
-regressions, plus host methodology, 40-round soak results, and retained R2
-evidence identities. See the [0.3.0 validation report](docs/benchmarks/0.3.0.md)
-and the [historical 0.2.0 report](docs/benchmarks/0.2.0.md).
+regressions, plus host methodology, 40-round soak results, exact device IDs,
+and retained R2 evidence identities. RP2040 percentages are not calculated
+because the retained release captures used different physical boards. See the
+[0.3.0 validation report](docs/benchmarks/0.3.0.md) and the
+[historical 0.2.0 report](docs/benchmarks/0.2.0.md).
 
 ## Public term representation
 
