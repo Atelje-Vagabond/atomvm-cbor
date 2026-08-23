@@ -107,18 +107,17 @@ jobs:
 
   otp:
     name: OTP validation
-    needs: [hygiene, performance]
+    needs: hygiene
     if: >-
       always() &&
       needs.hygiene.result == 'success' &&
-      needs.hygiene.outputs.otp == 'true' &&
-      (needs.performance.result == 'success' || needs.performance.result == 'skipped')
+      needs.hygiene.outputs.otp == 'true'
     runs-on: [self-hosted, Linux, X64, atelje-cloud]
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        otp: ["25", "27"]
+        otp: ["25", "27", "29"]
     steps:
       - name: Checkout exact source
         uses: actions/checkout@v7.0.1

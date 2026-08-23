@@ -29,9 +29,11 @@ unchanged runtime suite. Deleted paths are classified, unknown executable paths
 fail closed into the broad validation class, and a tag, manual run, or missing
 comparison history selects the complete chain.
 
-When runtime or benchmark paths select performance, that gate runs alone after
-hygiene. Only after the unchanged +5% regression limit passes do the other
-selected OTP, coverage, AtomVM, ESP-IDF, and package jobs fan out across the two
+When runtime or benchmark paths select performance, that gate runs after
+hygiene in parallel with the OTP 25, 27, and 29 compatibility matrix. OTP
+validation is therefore reported even when the OTP 29 performance comparison
+fails. Only after the unchanged +5% regression limit passes do the other
+selected coverage, AtomVM, ESP-IDF, and package jobs fan out across the two
 self-hosted runners. Documentation/release-note changes select the package job
 without reserving unrelated compiler or firmware capacity. The final job checks
 that every selected job passed and every unselected job was actually skipped;

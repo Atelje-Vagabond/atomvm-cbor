@@ -1,7 +1,5 @@
 -module(avm_cbor).
 
--compile({inline, [byte_string/3]}).
-
 -include("avm_cbor_opts.hrl").
 
 -export([
@@ -705,16 +703,12 @@ check_string_byte_limit(N, #cbor_opts{max_string_bytes = Limit}) ->
 array(0, Bin, State, _Depth) -> {ok, [], Bin, State};
 array(N, Bin, State, Depth) when N > 0 ->
     Opts = decode_opts(State),
-    case ensure_node_budget(N, State) of
+    case ensure_declared_items(N, Bin, State) of
         {error, _} = Err -> Err;
         ok ->
-            case declared_input_check(N, Bin) of
+            case check_depth(Depth + 1, Opts) of
                 {error, _} = Err -> Err;
-                ok ->
-                    case check_depth(Depth + 1, Opts) of
-                        {error, _} = Err -> Err;
-                        ok -> items(N, Bin, State, Depth + 1, [])
-                    end
+                ok -> items(N, Bin, State, Depth + 1, [])
             end
     end.
 

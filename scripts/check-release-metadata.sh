@@ -126,7 +126,17 @@ for required in (
     if required not in benchmark_script:
         raise SystemExit(f"dynamic/stable benchmark invariant is missing: {required}")
 
-for name in ("otp", "coverage", "atomvm", "esp-idf", "package"):
+otp = job("otp")
+if not re.search(r"^    needs: hygiene$", otp, re.MULTILINE):
+    raise SystemExit("otp must run independently after hygiene")
+if "needs.hygiene.outputs.otp == 'true'" not in otp:
+    raise SystemExit("otp must be selected by the changed-path classifier")
+if 'otp: ["25", "27", "29"]' not in otp:
+    raise SystemExit("otp compatibility matrix must cover 25, 27, and 29")
+if "needs.performance.result" in otp:
+    raise SystemExit("otp must not be skipped when selected performance fails")
+
+for name in ("coverage", "atomvm", "esp-idf", "package"):
     body = job(name)
     if not re.search(r"^    needs: \[hygiene, performance\]$", body, re.MULTILINE):
         raise SystemExit(f"{name} must depend on hygiene and performance")
