@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import statistics
 import sys
 from pathlib import Path
@@ -267,59 +268,68 @@ def change_text(baseline: float, candidate: float) -> str:
     return f"{percent:.2f}% {direction}"
 
 
+def signed_change(baseline: float, candidate: float) -> float:
+    return (candidate - baseline) * 100.0 / baseline
+
+
 def mermaid_label(value: str) -> str:
     return value.replace("&", "&amp;").replace('"', "&quot;")
 
 
-def current_release_diagram(data: dict[str, Any]) -> str:
+def current_release_charts(data: dict[str, Any]) -> str:
     baseline_version = mermaid_label(data["baseline"]["version"])
     candidate_version = mermaid_label(data["candidate"]["version"])
-    common_count = len(data["common_workloads"])
-    candidate_only_count = len(data["candidate_only_workloads"])
-    soak_rounds = {
-        data["targets"][target_id]["functional_soak"]["rounds"]
-        for target_id in REQUIRED_TARGETS
+    workloads = ["encode/1", "decode/1", "partial_decode/1"]
+    candidate_colors = {
+        "esp32-s3-n16r8": "#5C2D91",
+        "waveshare-n32r16v": "#65AE00",
+        "rp2040": "#2F80ED",
     }
-    if len(soak_rounds) != 1:
-        fail("all maintained targets must use the same bounded-soak round count")
-    soak_rounds_text = next(iter(soak_rounds))
-
     lines = [
-        "```mermaid",
-        "flowchart LR",
-        f'    baseline["Previous release<br/>{baseline_version}"]',
-        f'    current["Current release<br/>{candidate_version}"]',
-        f'    comparable["{common_count} comparable workloads<br/>{baseline_version} vs {candidate_version}"]',
-        f'    candidate_only["{candidate_only_count} current-only workloads<br/>measured on every target"]',
-        f'    soak["Bounded soak<br/>{soak_rounds_text} rounds per target"]',
-        "    baseline --> current",
-        "    current --> comparable",
-        "    current --> candidate_only",
-        "    current --> soak",
+        "Representative attached-device benchmark changes from "
+        f"{baseline_version} to {candidate_version}. Negative is faster; positive is "
+        "slower. Chart labels are percentages rounded to two decimal places; exact "
+        "timings follow in the benchmark table.",
     ]
 
-    target_nodes = []
-    waveshare_nodes = []
-    for index, target_id in enumerate(REQUIRED_TARGETS, start=1):
+    for target_id in REQUIRED_TARGETS:
         target = data["targets"][target_id]
-        node_id = f"target{index}"
-        label = mermaid_label(f"{target['short_name']}<br/>{target['cpu']}")
-        lines.append(f'    {node_id}["{label}"]')
-        target_nodes.append(node_id)
-        if "waveshare" in target_id.lower() or "waveshare" in label.lower():
-            waveshare_nodes.append(node_id)
-
-    lines.extend(f"    current --> {node_id}" for node_id in target_nodes)
-    lines.extend(
-        [
-            "    classDef currentRelease fill:#5C2D91,color:#FFFFFF,stroke:#3D1E61,stroke-width:2px",
-            "    classDef waveshareBrand fill:#65AE00,color:#FFFFFF,stroke:#3D6900,stroke-width:2px",
-            "    class current currentRelease",
-        ]
-    )
-    if waveshare_nodes:
-        lines.append(f"    class {','.join(waveshare_nodes)} waveshareBrand")
-    lines.append("```")
+        changes = []
+        for workload in workloads:
+            result = target["common_results"][workload]
+            changes.append(
+                signed_change(
+                    float(result["baseline_us"]), float(result["candidate_us"])
+                )
+            )
+        axis_limit = (
+            math.ceil(max(0.01, max(abs(change) for change in changes)) * 1.2 * 100)
+            / 100
+        )
+        change_bars = ", ".join(f"{change:.2f}" for change in changes)
+        title = mermaid_label(f"{target['short_name']} at {target['cpu']}")
+        lines.extend(
+            [
+                "",
+                "```mermaid",
+                "---",
+                "config:",
+                "  xyChart:",
+                "    height: 360",
+                "    showDataLabel: true",
+                "    showDataLabelOutsideBar: true",
+                "  themeVariables:",
+                "    xyChart:",
+                f'      plotColorPalette: "{candidate_colors[target_id]}"',
+                "---",
+                "xychart-beta",
+                f'    title "{title}"',
+                '    x-axis ["encode/1", "decode/1", "partial_decode/1"]',
+                f'    y-axis "Timing change (%)" {-axis_limit:.2f} --> {axis_limit:.2f}',
+                f"    bar [{change_bars}]",
+                "```",
+            ]
+        )
     return "\n".join(lines)
 
 
@@ -374,7 +384,49 @@ def common_table(data: dict[str, Any], workloads: list[str] | None = None) -> st
     return "\n".join(lines)
 
 
-def candidate_only_table(data: dict[str, Any]) -> str:
+def common_summary(data: dict[str, Any]) -> str:
+    rows = [
+        "Comparable-workload totals:",
+        "",
+        "| Scope | Faster rows | Slower rows | Net average change |",
+        "| :--- | ---: | ---: | ---: |",
+    ]
+    all_changes = []
+    for target_id in REQUIRED_TARGETS:
+        target = data["targets"][target_id]
+        changes = []
+        for workload in COMMON_WORKLOADS:
+            result = target["common_results"][workload]
+            changes.append(
+                signed_change(
+                    float(result["baseline_us"]), float(result["candidate_us"])
+                )
+            )
+        all_changes.extend(changes)
+        average = statistics.mean(changes)
+        rows.append(
+            f"| {target['display_name']} | {sum(change < 0 for change in changes)} | "
+            f"{sum(change > 0 for change in changes)} | {average:+.2f}% |"
+        )
+    overall = statistics.mean(all_changes)
+    rows.append(
+        f"| All {len(all_changes)} board/workload results | "
+        f"{sum(change < 0 for change in all_changes)} | "
+        f"{sum(change > 0 for change in all_changes)} | {overall:+.2f}% |"
+    )
+    rows.extend(
+        [
+            "",
+            "The net average is the unweighted arithmetic mean of the signed "
+            "per-row changes in this exact comparison matrix. Negative is faster; "
+            "positive is slower. Current-only workloads with an `N/A` baseline are "
+            "excluded.",
+        ]
+    )
+    return "\n".join(rows)
+
+
+def candidate_only_table(data: dict[str, Any], include_ranges: bool = True) -> str:
     targets = data["targets"]
     names = [targets[target_id]["short_name"] for target_id in REQUIRED_TARGETS]
     baseline_version = data["baseline"]["version"]
@@ -382,7 +434,8 @@ def candidate_only_table(data: dict[str, Any]) -> str:
     lines = [
         f"| Workload | {baseline_version} baseline | "
         + " | ".join(
-            f"{name} {candidate_version} median µs (five-run range)"
+            f"{name} {candidate_version} median µs"
+            + (" (five-run range)" if include_ranges else "")
             for name in names
         )
         + " |",
@@ -393,7 +446,10 @@ def candidate_only_table(data: dict[str, Any]) -> str:
         for target_id in REQUIRED_TARGETS:
             runs = targets[target_id]["candidate_only_results"][workload]["runs_us"]
             median = statistics.median(runs)
-            cells.append(f"{median:.2f} ({min(runs):.2f}-{max(runs):.2f})")
+            if include_ranges:
+                cells.append(f"{median:.2f} ({min(runs):.2f}-{max(runs):.2f})")
+            else:
+                cells.append(f"{median:.2f}")
         lines.append(f"| `{workload}` | N/A | " + " | ".join(cells) + " |")
     return "\n".join(lines)
 
@@ -457,11 +513,13 @@ def render_documents(path: Path, data: dict[str, Any]) -> dict[Path, str]:
 
     report_text = report.read_text(encoding="utf-8")
     report_text = replace_block(report_text, "report-identities", identity_table(data))
-    report_text = replace_block(report_text, "report-common", common_table(data))
+    report_text = replace_block(
+        report_text, "report-common", common_table(data) + "\n\n" + common_summary(data)
+    )
     report_text = replace_block(
         report_text,
         "report-candidate-only",
-        candidate_only_table(data)
+        candidate_only_table(data, include_ranges=False)
         + "\n\n"
         + candidate_only_evidence(data)
         + "\n\n"
@@ -481,7 +539,7 @@ def render_documents(path: Path, data: dict[str, Any]) -> dict[Path, str]:
 
     readme_text = readme.read_text(encoding="utf-8")
     readme_text = replace_block(
-        readme_text, "readme-current-release", current_release_diagram(data)
+        readme_text, "readme-current-release", current_release_charts(data)
     )
     readme_text = replace_block(
         readme_text, "readme-identities", identity_table(data, compact=True)
