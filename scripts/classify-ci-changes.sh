@@ -60,9 +60,8 @@ classify_public() {
             performance=true
             ;;
         scripts/benchmark-remediation.sh)
-            # The isolated runner group cannot authorize pull-request merge
-            # refs. Static invariants run in hygiene; exact tags select all
-            # jobs and execute this orchestration before publication.
+            # Static invariants run in hygiene; exact tags select all jobs and
+            # execute this orchestration before publication.
             ;;
         scripts/test-public.sh)
             otp=true
