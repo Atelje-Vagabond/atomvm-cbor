@@ -1,0 +1,233 @@
+{
+  "schema_version": 1,
+  "release": "0.3.1",
+  "baseline": {
+    "version": "0.2.0",
+    "commit": "50cae38fc0d846e41fe61c9d5d80229c6cff91f2"
+  },
+  "candidate": {
+    "version": "0.3.0",
+    "commit": "06333306be6d0f83d9b0b257afdc29f82bcd22ea"
+  },
+  "harness": {
+    "common_sha256": "9ff77b1a96b155ebf6006b9929b2054c3adf3a7b032a913a8f1b39d8bc0e82e6",
+    "candidate_only_sha256": "299fec5a1782c62e6afd03ab134b8a9711c4dff465cfdf3e054095aaa1234d65",
+    "functional_soak_sha256": "b31fc19a914c9b6f7f3b4d613f0e2587982e25041a610b339a1d5dae36eed14a",
+    "candidate_only_pack_sha256": "a92c4b93d3ce03f64529c18be63b9b42f1034fc55add0d108df6b51a14b21e59",
+    "functional_soak_entry_sha256": "f92bcef2c7e21ad06086440d9203a861321a7f9c5ab38ae8637a91ca17faa510",
+    "functional_soak_pack_sha256": "28f23f2cfae9c399d3672094ed11e9046bddab1e96fd61a85fc08ce4b96faff1"
+  },
+  "candidate_only_evidence_bundle": {
+    "artifact_name": "candidate-api-three-targets-06333306be6d0f83d9b0b257afdc29f82bcd22ea.tar.gz",
+    "artifact_sha256": "16b762a265d73ea53a9f9491722093222b9df87c0cc62877636acbd21c35e90e",
+    "location": "Dell operator evidence: results/candidate-api/"
+  },
+  "required_targets": [
+    "esp32-s3-n16r8",
+    "waveshare-n32r16v",
+    "rp2040"
+  ],
+  "common_workloads": [
+    "encode/1",
+    "decode/1",
+    "partial_decode/1",
+    "partial_decode/2",
+    "partial_deep_decode/1",
+    "partial_value_bytes/1",
+    "partial_contents/1",
+    "partial_skip/1",
+    "partial_type/1",
+    "partial_count/1",
+    "partial_tag/1",
+    "partial_size/1",
+    "partial_offset/1",
+    "partial_length/1"
+  ],
+  "candidate_only_workloads": [
+    "encode_with_size_nested",
+    "encode_sequence_32",
+    "sequence_fold_32",
+    "validate_all_nested",
+    "partial_map_fold",
+    "partial_array_fold",
+    "partial_select",
+    "partial_map_find",
+    "partial_array_nth"
+  ],
+  "targets": {
+    "esp32-s3-n16r8": {
+      "display_name": "ESP32-S3 N16R8",
+      "short_name": "ESP32-S3 N16R8",
+      "identity": "QFN56 rev 0.2, MAC `1c:db:d4:5b:f5:d0`, native USB identifier `1C:DB:D4:5B:F5:D0`",
+      "cpu": "240 MHz",
+      "memory": "16 MiB DIO flash / 8 MiB octal PSRAM, both 80 MHz",
+      "common_evidence": {
+        "capture_count": 10,
+        "location": "Dell operator evidence: results/esp32-s3-n16r8-pair*-*.log",
+        "log_set_sha256": "de72abbf08bb70d0e46c3c78dc2af37b0fa287fefe2f2190858d724a98b5dd35"
+      },
+      "common_results": {
+        "encode/1": {"baseline_us": 8849.46, "candidate_us": 8844.02},
+        "decode/1": {"baseline_us": 10063.52, "candidate_us": 10044.02},
+        "partial_decode/1": {"baseline_us": 15575.38, "candidate_us": 15575.92},
+        "partial_decode/2": {"baseline_us": 15737.26, "candidate_us": 15738.90},
+        "partial_deep_decode/1": {"baseline_us": 12227.04, "candidate_us": 12219.28},
+        "partial_value_bytes/1": {"baseline_us": 1017.20, "candidate_us": 1011.64},
+        "partial_contents/1": {"baseline_us": 1260.14, "candidate_us": 1252.28},
+        "partial_skip/1": {"baseline_us": 509.06, "candidate_us": 480.23},
+        "partial_type/1": {"baseline_us": 510.14, "candidate_us": 479.82},
+        "partial_count/1": {"baseline_us": 508.55, "candidate_us": 480.30},
+        "partial_tag/1": {"baseline_us": 554.26, "candidate_us": 605.99},
+        "partial_size/1": {"baseline_us": 568.37, "candidate_us": 618.16},
+        "partial_offset/1": {"baseline_us": 508.95, "candidate_us": 479.53},
+        "partial_length/1": {"baseline_us": 511.07, "candidate_us": 477.45}
+      },
+      "candidate_only_evidence": {
+        "capture_count": 5,
+        "location": "Dell operator evidence: results/candidate-api/esp32-s3-n16r8-candidate-api-run[1-5].log",
+        "log_set_sha256": "8ebad927d7bce1e592a50425205e80bf50355dec469b1d13ac49557b21ed6ab4"
+      },
+      "candidate_only_results": {
+        "encode_with_size_nested": {"runs_us": [8549.76, 8557.58, 8557.30, 8549.84, 8553.46]},
+        "encode_sequence_32": {"runs_us": [22352.82, 22378.18, 22377.74, 22358.82, 22387.62]},
+        "sequence_fold_32": {"runs_us": [51161.94, 51154.64, 51170.30, 51157.92, 51176.30]},
+        "validate_all_nested": {"runs_us": [20296.14, 20282.00, 20272.00, 20303.40, 20292.08]},
+        "partial_map_fold": {"runs_us": [33099.10, 33104.88, 33097.00, 33096.26, 33083.88]},
+        "partial_array_fold": {"runs_us": [29525.26, 29536.72, 29531.66, 29534.72, 29525.00]},
+        "partial_select": {"runs_us": [36930.84, 36947.22, 36950.48, 36957.40, 36944.30]},
+        "partial_map_find": {"runs_us": [36401.34, 36417.72, 36415.96, 36418.70, 36417.74]},
+        "partial_array_nth": {"runs_us": [27371.60, 27372.00, 27372.70, 27372.46, 27371.98]}
+      },
+      "functional_soak": {
+        "result": "pass",
+        "rounds": 40,
+        "forbidden_markers_absent": true,
+        "source_commit": "06333306be6d0f83d9b0b257afdc29f82bcd22ea",
+        "run_label": "Dell exact-tag supplemental functional/soak capture, 2026-08-23",
+        "evidence_url": "https://github.com/Atelje-Vagabond/atomvm-cbor/pull/12",
+        "artifact_name": "esp32-s3-n16r8-functional-soak-06333306be6d0f83d9b0b257afdc29f82bcd22ea.tar.gz",
+        "artifact_sha256": "7e138061ae7dcf7452bfd5e2410731d300516a0c85d0356f051fc48212449ac7",
+        "first_heap_max_words": 63,
+        "late_heap_max_words": 63,
+        "first_memory_max_bytes": 492,
+        "late_memory_max_bytes": 492
+      }
+    },
+    "waveshare-n32r16v": {
+      "display_name": "WaveShare N32R16V",
+      "short_name": "WaveShare N32R16V",
+      "identity": "ESP32-S3-DEV-KIT-N32R16V, MAC `90:e5:b1:d8:48:b0`, CH340 UART serial `5B61092782`",
+      "cpu": "240 MHz",
+      "memory": "32 MiB OPI/DTR flash / 16 MiB octal PSRAM, both 80 MHz",
+      "common_evidence": {
+        "capture_count": 10,
+        "location": "Dell operator evidence: results/waveshare-n32r16v-pair*-*.log",
+        "log_set_sha256": "b436421f7b22712fe69618fed24464f39ca32dd3a7b8b05365f067ed54f1fe04"
+      },
+      "common_results": {
+        "encode/1": {"baseline_us": 3507.30, "candidate_us": 3508.00},
+        "decode/1": {"baseline_us": 3931.22, "candidate_us": 3935.36},
+        "partial_decode/1": {"baseline_us": 6325.48, "candidate_us": 6327.62},
+        "partial_decode/2": {"baseline_us": 6373.28, "candidate_us": 6373.64},
+        "partial_deep_decode/1": {"baseline_us": 4972.54, "candidate_us": 4985.38},
+        "partial_value_bytes/1": {"baseline_us": 451.96, "candidate_us": 463.16},
+        "partial_contents/1": {"baseline_us": 511.97, "candidate_us": 522.50},
+        "partial_skip/1": {"baseline_us": 227.07, "candidate_us": 232.11},
+        "partial_type/1": {"baseline_us": 226.62, "candidate_us": 231.48},
+        "partial_count/1": {"baseline_us": 227.51, "candidate_us": 232.16},
+        "partial_tag/1": {"baseline_us": 270.87, "candidate_us": 309.82},
+        "partial_size/1": {"baseline_us": 285.07, "candidate_us": 323.83},
+        "partial_offset/1": {"baseline_us": 227.21, "candidate_us": 231.56},
+        "partial_length/1": {"baseline_us": 228.18, "candidate_us": 231.84}
+      },
+      "candidate_only_evidence": {
+        "capture_count": 5,
+        "location": "Dell operator evidence: results/candidate-api/waveshare-n32r16v-candidate-api-run[1-5].log",
+        "log_set_sha256": "f7d4255126b375f76ff872806b77af8d2c97c9c90c124d0ce8f15a5ebdd799a4"
+      },
+      "candidate_only_results": {
+        "encode_with_size_nested": {"runs_us": [3487.38, 3487.28, 3487.34, 3487.36, 3487.30]},
+        "encode_sequence_32": {"runs_us": [8938.64, 8938.18, 8938.22, 8938.22, 8938.24]},
+        "sequence_fold_32": {"runs_us": [20211.58, 20212.42, 20206.16, 20206.16, 20206.14]},
+        "validate_all_nested": {"runs_us": [7699.58, 7702.72, 7699.96, 7699.92, 7700.02]},
+        "partial_map_fold": {"runs_us": [12649.60, 12649.26, 12651.24, 12652.86, 12652.74]},
+        "partial_array_fold": {"runs_us": [11214.76, 11220.20, 11218.90, 11219.80, 11219.86]},
+        "partial_select": {"runs_us": [14596.04, 14598.86, 14595.60, 14592.70, 14592.92]},
+        "partial_map_find": {"runs_us": [14349.98, 14353.32, 14349.22, 14349.28, 14349.08]},
+        "partial_array_nth": {"runs_us": [10498.76, 10499.96, 10498.58, 10498.66, 10498.66]}
+      },
+      "functional_soak": {
+        "result": "pass",
+        "rounds": 40,
+        "forbidden_markers_absent": true,
+        "source_commit": "12903636339edb1172167d3905907ff583ffd7d2",
+        "run_label": "retained release-candidate run 32586422115, ESP job 97064781219",
+        "evidence_url": "https://github.com/Atelje-Vagabond/atomvm-cbor/pull/12",
+        "artifact_name": "esp32-s3-hardware-results-12903636339edb1172167d3905907ff583ffd7d2.tar.gz",
+        "artifact_sha256": "51203bb68c0fd89f9b9ff909e6fa97b96a906b0db74dfb5a16311cab49ed1572",
+        "first_heap_max_words": 63,
+        "late_heap_max_words": 63,
+        "first_memory_max_bytes": 492,
+        "late_memory_max_bytes": 492
+      }
+    },
+    "rp2040": {
+      "display_name": "RP2040 E462…",
+      "short_name": "RP2040 E462…",
+      "identity": "RP2040 B2, BOOTSEL serial `E0C9125B0D9B`, flash ID `E46254C5C32D122C`",
+      "cpu": "133 MHz",
+      "memory": "16 MiB flash / 264 KiB SRAM",
+      "common_evidence": {
+        "capture_count": 10,
+        "location": "Dell operator evidence: results/rp2040-e462-pair*-*.log",
+        "log_set_sha256": "de757352fdc149584ab0ba9cca98fcb51de74670168fdca48a9bf36af6132468"
+      },
+      "common_results": {
+        "encode/1": {"baseline_us": 4824.60, "candidate_us": 4791.26},
+        "decode/1": {"baseline_us": 6082.16, "candidate_us": 6067.22},
+        "partial_decode/1": {"baseline_us": 9261.06, "candidate_us": 9346.80},
+        "partial_decode/2": {"baseline_us": 9275.70, "candidate_us": 9372.16},
+        "partial_deep_decode/1": {"baseline_us": 7742.00, "candidate_us": 7786.84},
+        "partial_value_bytes/1": {"baseline_us": 557.50, "candidate_us": 555.89},
+        "partial_contents/1": {"baseline_us": 498.50, "candidate_us": 503.04},
+        "partial_skip/1": {"baseline_us": 226.12, "candidate_us": 221.10},
+        "partial_type/1": {"baseline_us": 226.05, "candidate_us": 221.50},
+        "partial_count/1": {"baseline_us": 228.13, "candidate_us": 221.88},
+        "partial_tag/1": {"baseline_us": 250.46, "candidate_us": 262.50},
+        "partial_size/1": {"baseline_us": 263.27, "candidate_us": 270.00},
+        "partial_offset/1": {"baseline_us": 225.49, "candidate_us": 223.25},
+        "partial_length/1": {"baseline_us": 228.41, "candidate_us": 224.42}
+      },
+      "candidate_only_evidence": {
+        "capture_count": 5,
+        "location": "Dell operator evidence: results/candidate-api/rp2040-candidate-api-run[1-5].log",
+        "log_set_sha256": "789e570e4622f75e27da6497d88fc434cfa6ec0415095fdacb71a133f317ce9d"
+      },
+      "candidate_only_results": {
+        "encode_with_size_nested": {"runs_us": [4819.40, 4814.56, 4821.22, 4817.44, 4816.66]},
+        "encode_sequence_32": {"runs_us": [10793.72, 10787.50, 10790.82, 10792.68, 10795.38]},
+        "sequence_fold_32": {"runs_us": [27623.22, 27622.24, 27612.84, 27620.30, 27612.96]},
+        "validate_all_nested": {"runs_us": [9819.90, 9820.18, 9816.10, 9815.66, 9820.62]},
+        "partial_map_fold": {"runs_us": [17692.42, 17678.64, 17677.40, 17693.14, 17685.38]},
+        "partial_array_fold": {"runs_us": [15642.32, 15643.16, 15636.90, 15640.58, 15645.04]},
+        "partial_select": {"runs_us": [20275.32, 20272.86, 20279.16, 20280.98, 20272.16]},
+        "partial_map_find": {"runs_us": [19768.32, 19771.50, 19772.56, 19783.00, 19776.74]},
+        "partial_array_nth": {"runs_us": [14340.08, 14331.12, 14334.30, 14342.66, 14342.54]}
+      },
+      "functional_soak": {
+        "result": "pass",
+        "rounds": 40,
+        "forbidden_markers_absent": true,
+        "source_commit": "12903636339edb1172167d3905907ff583ffd7d2",
+        "run_label": "retained release-candidate run 32586422115, RP2040 job 97064781214",
+        "evidence_url": "https://github.com/Atelje-Vagabond/atomvm-cbor/pull/12",
+        "artifact_name": "rp2040-hardware-results-12903636339edb1172167d3905907ff583ffd7d2.tar.gz",
+        "artifact_sha256": "0bd6594e9012bc967985fcf7fdd35f7ea4e5a470c928f29e3866896a98fcb238",
+        "first_heap_max_words": 63,
+        "late_heap_max_words": 63,
+        "first_memory_max_bytes": 484,
+        "late_memory_max_bytes": 484
+      }
+    }
+  }
+}

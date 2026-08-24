@@ -11,69 +11,25 @@
 
 A compact RFC 8949 CBOR encoder and decoder for AtomVM and constrained Erlang runtimes. It is pure Erlang, has no runtime dependencies, NIFs, or ports, and preserves the public `{text, Binary}` and `{map, Pairs}` representations.
 
-Version 0.3.0 adds bounded descriptor traversal, selective extraction, sequence
-encoding/folding, exact-size encoding, and complete-input validation. Version
-0.2.0 was the first Hex.pm release; public Git tag `v0.1.1` was never published
-to Hex.
+Version 0.3.1 is a documentation-compatibility patch that renders the current
+benchmark comparison as static SVG on GitHub and Hex.pm; runtime behavior and
+the measured 0.3.0 results are unchanged. Version 0.3.0 added bounded descriptor
+traversal, selective extraction, sequence encoding/folding, exact-size encoding,
+and complete-input validation. Version 0.2.0 was the first Hex.pm release;
+public Git tag `v0.1.1` was never published to Hex.
 
 ## Current release
 
 <!-- release-evidence:readme-current-release:start -->
-Representative attached-device benchmark changes from 0.2.0 to 0.3.0. Negative is faster; positive is slower. Chart labels are percentages rounded to two decimal places; exact timings follow in the benchmark table.
+Version 0.3.1 contains no runtime changes and reuses the exact 0.3.0 benchmark evidence.
 
-```mermaid
----
-config:
-  xyChart:
-    height: 360
-    showDataLabel: true
-    showDataLabelOutsideBar: true
-  themeVariables:
-    xyChart:
-      plotColorPalette: "#5C2D91"
----
-xychart-beta
-    title "ESP32-S3 N16R8 at 240 MHz"
-    x-axis ["encode/1", "decode/1", "partial_decode/1"]
-    y-axis "Timing change (%)" -0.24 --> 0.24
-    bar [-0.06, -0.19, 0.00]
-```
+Representative attached-device benchmark changes from 0.2.0 to 0.3.0. Negative is faster; positive is slower. Static SVG labels are percentages rounded to two decimal places; exact timings follow in the benchmark table.
 
-```mermaid
----
-config:
-  xyChart:
-    height: 360
-    showDataLabel: true
-    showDataLabelOutsideBar: true
-  themeVariables:
-    xyChart:
-      plotColorPalette: "#65AE00"
----
-xychart-beta
-    title "WaveShare N32R16V at 240 MHz"
-    x-axis ["encode/1", "decode/1", "partial_decode/1"]
-    y-axis "Timing change (%)" -0.13 --> 0.13
-    bar [0.02, 0.11, 0.03]
-```
+![ESP32-S3 N16R8 at 240 MHz benchmark timing changes](https://raw.githubusercontent.com/Atelje-Vagabond/atomvm-cbor/0.3.1/docs/benchmarks/charts/0.3.1/esp32-s3-n16r8.svg)
 
-```mermaid
----
-config:
-  xyChart:
-    height: 360
-    showDataLabel: true
-    showDataLabelOutsideBar: true
-  themeVariables:
-    xyChart:
-      plotColorPalette: "#2F80ED"
----
-xychart-beta
-    title "RP2040 E462… at 133 MHz"
-    x-axis ["encode/1", "decode/1", "partial_decode/1"]
-    y-axis "Timing change (%)" -1.12 --> 1.12
-    bar [-0.69, -0.25, 0.93]
-```
+![WaveShare N32R16V at 240 MHz benchmark timing changes](https://raw.githubusercontent.com/Atelje-Vagabond/atomvm-cbor/0.3.1/docs/benchmarks/charts/0.3.1/waveshare-n32r16v.svg)
+
+![RP2040 E462… at 133 MHz benchmark timing changes](https://raw.githubusercontent.com/Atelje-Vagabond/atomvm-cbor/0.3.1/docs/benchmarks/charts/0.3.1/rp2040.svg)
 <!-- release-evidence:readme-current-release:end -->
 
 ## Installation
@@ -82,14 +38,14 @@ Rebar3 projects use the OTP application name `avm_cbor` and Hex package name `at
 
 ```erlang
 {deps, [
-    {avm_cbor, "~> 0.3.0", {pkg, atomvm_cbor}}
+    {avm_cbor, "~> 0.3.1", {pkg, atomvm_cbor}}
 ]}.
 ```
 
 Mix projects use:
 
 ```elixir
-{:avm_cbor, "~> 0.3.0", hex: :atomvm_cbor}
+{:avm_cbor, "~> 0.3.1", hex: :atomvm_cbor}
 ```
 
 ## Capabilities
@@ -134,7 +90,8 @@ The full report publishes all 14 comparable workloads and all nine 0.3.0-only
 workloads for every board, exact host results, measured accessor regressions,
 device and firmware identities, three-device 40-round soak evidence, evidence
 checksums, and reproduction details. See the
-[0.3.0 validation report](docs/benchmarks/0.3.0.md) and the
+[0.3.1 validation report](docs/benchmarks/0.3.1.md), the original
+[0.3.0 validation report](docs/benchmarks/0.3.0.md), and the
 [historical 0.2.0 report](docs/benchmarks/0.2.0.md).
 
 ## Public term representation
@@ -255,13 +212,14 @@ containers use the general bounded decoder and retain the same errors.
 - [Decoder policy and security limits](docs/decoder-policy.md)
 - [Pinned AtomVM memory evidence](docs/atomvm-memory-internals.md)
 - [Benchmark methodology](https://github.com/Atelje-Vagabond/atomvm-cbor/blob/main/docs/benchmarks.md)
+- [0.3.1 validation report](docs/benchmarks/0.3.1.md)
 - [0.3.0 benchmark report](docs/benchmarks/0.3.0.md)
 - [Changelog](CHANGELOG.md)
 
 Run the public validation suite:
 
 ```bash
-scripts/release-check.sh 0.3.0
+scripts/release-check.sh 0.3.1
 ```
 
 Run the reproducible host benchmark:

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import json
 import math
 import statistics
@@ -272,62 +273,138 @@ def signed_change(baseline: float, candidate: float) -> float:
     return (candidate - baseline) * 100.0 / baseline
 
 
-def mermaid_label(value: str) -> str:
-    return value.replace("&", "&amp;").replace('"', "&quot;")
+CHART_WORKLOADS = ["encode/1", "decode/1", "partial_decode/1"]
+CHART_COLORS = {
+    "esp32-s3-n16r8": "#5C2D91",
+    "waveshare-n32r16v": "#65AE00",
+    "rp2040": "#2F80ED",
+}
+
+
+def chart_changes(data: dict[str, Any], target_id: str) -> list[float]:
+    target = data["targets"][target_id]
+    return [
+        signed_change(
+            float(target["common_results"][workload]["baseline_us"]),
+            float(target["common_results"][workload]["candidate_us"]),
+        )
+        for workload in CHART_WORKLOADS
+    ]
+
+
+def benchmark_chart_svg(data: dict[str, Any], target_id: str) -> str:
+    target = data["targets"][target_id]
+    baseline_version = html.escape(data["baseline"]["version"])
+    candidate_version = html.escape(data["candidate"]["version"])
+    title = html.escape(f"{target['short_name']} at {target['cpu']}")
+    changes = chart_changes(data, target_id)
+    axis_limit = (
+        math.ceil(max(0.01, max(abs(change) for change in changes)) * 1.2 * 100)
+        / 100
+    )
+    zero_x = 590.0
+    half_width = 285.0
+    scale = half_width / axis_limit
+    rows = []
+    for index, (workload, change) in enumerate(zip(CHART_WORKLOADS, changes)):
+        y = 125 + index * 72
+        value_width = abs(change) * scale
+        bar_x = zero_x if change >= 0 else zero_x - value_width
+        value = f"{change:+.2f}%".replace("-", "−")
+        if abs(change) < 0.005:
+            shape = (
+                f'  <circle cx="{zero_x:.1f}" cy="{y + 15}" r="5" '
+                f'fill="{CHART_COLORS[target_id]}"/>'
+            )
+            value_x = zero_x + 12
+            anchor = "start"
+        else:
+            shape = (
+                f'  <rect x="{bar_x:.1f}" y="{y}" width="{value_width:.1f}" '
+                f'height="30" rx="4" fill="{CHART_COLORS[target_id]}"/>'
+            )
+            value_x = bar_x - 10 if change < 0 else bar_x + value_width + 10
+            anchor = "end" if change < 0 else "start"
+        rows.extend(
+            [
+                f'  <text x="28" y="{y + 21}" class="workload">{html.escape(workload)}</text>',
+                shape,
+                f'  <text x="{value_x:.1f}" y="{y + 21}" text-anchor="{anchor}" '
+                f'class="value">{value}</text>',
+            ]
+        )
+    axis_half = axis_limit / 2
+    return "\n".join(
+        [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" '
+            'viewBox="0 0 960 360" role="img" aria-labelledby="title desc">',
+            f'  <title id="title">{title} benchmark timing changes</title>',
+            f'  <desc id="desc">Representative {baseline_version} to {candidate_version} '
+            'timing changes. Negative values are faster and positive values are slower.</desc>',
+            '  <rect x="1" y="1" width="958" height="358" rx="12" fill="#ffffff" stroke="#d0d7de"/>',
+            '  <style>',
+            '    text { font-family: Arial, Helvetica, sans-serif; fill: #24292f; }',
+            '    .title { font-size: 23px; font-weight: 700; }',
+            '    .subtitle, .axis { font-size: 14px; fill: #57606a; }',
+            '    .workload { font-size: 16px; font-weight: 600; }',
+            '    .value { font-size: 15px; font-weight: 700; }',
+            '  </style>',
+            f'  <text x="28" y="38" class="title">{title}</text>',
+            f'  <text x="28" y="64" class="subtitle">{baseline_version} → {candidate_version} timing change; negative is faster, positive is slower</text>',
+            '  <rect x="305" y="91" width="285" height="230" fill="#f0fff4"/>',
+            '  <rect x="590" y="91" width="285" height="230" fill="#fff5f5"/>',
+            '  <line x1="305" y1="91" x2="305" y2="321" stroke="#d8dee4"/>',
+            '  <line x1="447.5" y1="91" x2="447.5" y2="321" stroke="#d8dee4" stroke-dasharray="4 4"/>',
+            '  <line x1="590" y1="91" x2="590" y2="321" stroke="#57606a" stroke-width="2"/>',
+            '  <line x1="732.5" y1="91" x2="732.5" y2="321" stroke="#d8dee4" stroke-dasharray="4 4"/>',
+            '  <line x1="875" y1="91" x2="875" y2="321" stroke="#d8dee4"/>',
+            *rows,
+            f'  <text x="305" y="344" text-anchor="middle" class="axis">−{axis_limit:.2f}%</text>',
+            f'  <text x="447.5" y="344" text-anchor="middle" class="axis">−{axis_half:.2f}%</text>',
+            '  <text x="590" y="344" text-anchor="middle" class="axis">0%</text>',
+            f'  <text x="732.5" y="344" text-anchor="middle" class="axis">+{axis_half:.2f}%</text>',
+            f'  <text x="875" y="344" text-anchor="middle" class="axis">+{axis_limit:.2f}%</text>',
+            '</svg>',
+            '',
+        ]
+    )
+
+
+def current_release_assets(data: dict[str, Any]) -> dict[Path, str]:
+    directory = (
+        ROOT / "docs" / "benchmarks" / "charts" / data["release"]
+    )
+    return {
+        directory / f"{target_id}.svg": benchmark_chart_svg(data, target_id)
+        for target_id in REQUIRED_TARGETS
+    }
 
 
 def current_release_charts(data: dict[str, Any]) -> str:
-    baseline_version = mermaid_label(data["baseline"]["version"])
-    candidate_version = mermaid_label(data["candidate"]["version"])
-    workloads = ["encode/1", "decode/1", "partial_decode/1"]
-    candidate_colors = {
-        "esp32-s3-n16r8": "#5C2D91",
-        "waveshare-n32r16v": "#65AE00",
-        "rp2040": "#2F80ED",
-    }
+    baseline_version = data["baseline"]["version"]
+    candidate_version = data["candidate"]["version"]
+    release = data["release"]
     lines = [
+        f"Version {release} contains no runtime changes and reuses the exact "
+        f"{candidate_version} benchmark evidence.",
+        "",
         "Representative attached-device benchmark changes from "
         f"{baseline_version} to {candidate_version}. Negative is faster; positive is "
-        "slower. Chart labels are percentages rounded to two decimal places; exact "
+        "slower. Static SVG labels are percentages rounded to two decimal places; exact "
         "timings follow in the benchmark table.",
     ]
 
     for target_id in REQUIRED_TARGETS:
         target = data["targets"][target_id]
-        changes = []
-        for workload in workloads:
-            result = target["common_results"][workload]
-            changes.append(
-                signed_change(
-                    float(result["baseline_us"]), float(result["candidate_us"])
-                )
-            )
-        axis_limit = (
-            math.ceil(max(0.01, max(abs(change) for change in changes)) * 1.2 * 100)
-            / 100
+        asset = (
+            "https://raw.githubusercontent.com/Atelje-Vagabond/atomvm-cbor/"
+            f"{release}/docs/benchmarks/charts/{release}/{target_id}.svg"
         )
-        change_bars = ", ".join(f"{change:.2f}" for change in changes)
-        title = mermaid_label(f"{target['short_name']} at {target['cpu']}")
         lines.extend(
             [
                 "",
-                "```mermaid",
-                "---",
-                "config:",
-                "  xyChart:",
-                "    height: 360",
-                "    showDataLabel: true",
-                "    showDataLabelOutsideBar: true",
-                "  themeVariables:",
-                "    xyChart:",
-                f'      plotColorPalette: "{candidate_colors[target_id]}"',
-                "---",
-                "xychart-beta",
-                f'    title "{title}"',
-                '    x-axis ["encode/1", "decode/1", "partial_decode/1"]',
-                f'    y-axis "Timing change (%)" {-axis_limit:.2f} --> {axis_limit:.2f}',
-                f"    bar [{change_bars}]",
-                "```",
+                f"![{target['short_name']} at {target['cpu']} benchmark timing changes]({asset})",
             ]
         )
     return "\n".join(lines)
@@ -550,7 +627,12 @@ def render_documents(path: Path, data: dict[str, Any]) -> dict[Path, str]:
         common_table(data, ["encode/1", "decode/1", "partial_decode/1"]),
     )
 
-    return {report: report_text, notes: notes_text, readme: readme_text}
+    return {
+        report: report_text,
+        notes: notes_text,
+        readme: readme_text,
+        **current_release_assets(data),
+    }
 
 
 def main() -> int:
@@ -576,12 +658,13 @@ def main() -> int:
         documents = render_documents(path, data)
         if args.write:
             for document, rendered in documents.items():
+                document.parent.mkdir(parents=True, exist_ok=True)
                 document.write_text(rendered, encoding="utf-8")
-            print("Release evidence Markdown blocks regenerated.")
+            print("Release evidence Markdown blocks and SVG charts regenerated.")
             return 0
         stale = []
         for document, rendered in documents.items():
-            if document.read_text(encoding="utf-8") != rendered:
+            if not document.is_file() or document.read_text(encoding="utf-8") != rendered:
                 stale.append(str(document.relative_to(ROOT)))
         if stale:
             fail(f"generated release evidence is stale: {stale}; run --write")

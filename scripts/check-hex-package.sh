@@ -17,6 +17,11 @@ for candidate in docs/benchmarks/*.md; do
         benchmark_reports+=("${candidate}")
     fi
 done
+chart_assets=(docs/benchmarks/charts/"${release_version}"/*.svg)
+if [ "${#chart_assets[@]}" -ne 3 ] || [ ! -f "${chart_assets[0]}" ]; then
+    echo 'FAIL: expected exactly three current-release SVG benchmark charts.' >&2
+    exit 1
+fi
 if [ "${#benchmark_reports[@]}" -eq 0 ]; then
     echo 'FAIL: no canonical versioned benchmark reports found.' >&2
     exit 1
@@ -26,7 +31,8 @@ for required in \
     src/avm_cbor.erl src/avm_cbor_cont.erl src/avm_cbor_partial.erl src/avm_cbor_opts.hrl \
     src/avm_cbor.app.src rebar.config VERSION README.md CHANGELOG.md \
     LICENSE docs/api.md docs/decoder-policy.md docs/atomvm-memory-internals.md \
-    docs/benchmarks.md "${release_manifest}" "${benchmark_reports[@]}"; do
+    docs/benchmarks.md "${release_manifest}" "${benchmark_reports[@]}" \
+    "${chart_assets[@]}"; do
     test -s "${package_dir}/${required}"
 done
 
@@ -55,6 +61,7 @@ for benchmark_report in "${benchmark_reports[@]}"; do
     printf '%s\n' "${benchmark_report}" >> "${expected}"
 done
 printf '%s\n' "${release_manifest}" >> "${expected}"
+printf '%s\n' "${chart_assets[@]}" >> "${expected}"
 sort -o "${expected}" "${expected}"
 if ! diff -u "${expected}" "${actual}"; then
     echo 'FAIL: Hex package file list differs from the allowlist.' >&2
