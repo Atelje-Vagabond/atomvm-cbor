@@ -11,6 +11,17 @@ test -d "${package_dir}"
 release_version="$(python3 scripts/read-release-version.py)"
 release_manifest="docs/benchmarks/data/${release_version}.json"
 
+release_manifests=()
+for candidate in docs/benchmarks/data/*.json; do
+    if [[ "$(basename "${candidate}")" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+\.json$ ]]; then
+        release_manifests+=("${candidate}")
+    fi
+done
+if [ "${#release_manifests[@]}" -eq 0 ]; then
+    echo 'FAIL: no canonical versioned release-evidence manifests found.' >&2
+    exit 1
+fi
+
 benchmark_reports=()
 for candidate in docs/benchmarks/*.md; do
     if [[ "$(basename "${candidate}")" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+\.md$ ]]; then
@@ -60,7 +71,7 @@ FILES
 for benchmark_report in "${benchmark_reports[@]}"; do
     printf '%s\n' "${benchmark_report}" >> "${expected}"
 done
-printf '%s\n' "${release_manifest}" >> "${expected}"
+printf '%s\n' "${release_manifests[@]}" >> "${expected}"
 printf '%s\n' "${chart_assets[@]}" >> "${expected}"
 sort -o "${expected}" "${expected}"
 if ! diff -u "${expected}" "${actual}"; then
