@@ -85,6 +85,11 @@ evidence only when every one of those paths is byte-identical and records the
 combined source-set SHA-256. Any changed byte follows the normal measured gate
 with the same 5% median and p95 thresholds.
 
+Changes to the performance orchestration are checked by public hygiene and
+local pre-PR validation. The restricted performance runner executes them at the
+automatic exact-tag gate. Runtime or benchmark-harness changes still select
+performance validation before the release tag.
+
 See the [0.3.1 validation report](benchmarks/0.3.1.md) for the current package
 and retained exact evidence, and the [0.3.0 validation
 report](benchmarks/0.3.0.md) for the original exact-public-tag,

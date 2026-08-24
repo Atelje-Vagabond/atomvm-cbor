@@ -35,6 +35,14 @@ for key in performance otp coverage atomvm esp_idf; do
     assert_route "${public_release_evidence}" "${key}" false
 done
 
+public_benchmark_orchestration="$(route public scripts/benchmark-remediation.sh)"
+for key in performance otp coverage atomvm esp_idf package; do
+    assert_route "${public_benchmark_orchestration}" "${key}" false
+done
+
+public_benchmark_harness="$(route public bench/remediation_benchmark.erl)"
+assert_route "${public_benchmark_harness}" performance true
+
 public_version_only="$(route public VERSION)"
 assert_route "${public_version_only}" package true
 for key in performance otp coverage atomvm esp_idf; do
