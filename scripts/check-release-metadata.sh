@@ -6,6 +6,28 @@ cd "${repo_root}"
 
 version="$(python3 scripts/read-release-version.py)"
 release_notes=".github/releases/${version}.md"
+mapfile -t evidence_identity < <(python3 - <<'PY'
+import json
+import re
+from pathlib import Path
+
+version = Path("VERSION").read_text(encoding="utf-8").strip()
+manifest = json.loads(
+    Path(f"docs/benchmarks/data/{version}.json").read_text(encoding="utf-8")
+)
+release_notes = Path(f".github/releases/{version}.md").read_text(encoding="utf-8")
+match = re.search(
+    rf"\]\(\.\./\.\./blob/([0-9a-f]{{40}})/docs/benchmarks/{re.escape(version)}\.md\)",
+    release_notes,
+)
+if match is None:
+    raise SystemExit("release report link must use a full immutable commit SHA")
+print(match.group(1))
+print(manifest["baseline"]["version"])
+PY
+)
+report_snapshot_commit="${evidence_identity[0]}"
+baseline_version="${evidence_identity[1]}"
 
 grep -Fq "{vsn, \"${version}\"}" src/avm_cbor.app.src
 grep -Fq '{pkg_name, atomvm_cbor}' src/avm_cbor.app.src
@@ -17,10 +39,15 @@ grep -Fq 'filelib:wildcard("docs/benchmarks/*.md")' rebar.config.script
 grep -Fq '"^v?[0-9]+\\.[0-9]+\\.[0-9]+\\.md$"' rebar.config.script
 grep -Fq "# atomvm-cbor ${version}" "${release_notes}"
 grep -Fq "## ${version}" CHANGELOG.md
-grep -Fq "](../../blob/${version}/docs/benchmarks/${version}.md)" "${release_notes}"
+grep -Fq "](../../blob/${report_snapshot_commit}/docs/benchmarks/${version}.md)" "${release_notes}"
+grep -Fq "](../../blob/${baseline_version}/docs/benchmarks/${baseline_version}.md)" "${release_notes}"
+git cat-file -e "${report_snapshot_commit}^{commit}"
+git cat-file -e "refs/tags/${baseline_version}^{commit}"
+git show "${report_snapshot_commit}:docs/benchmarks/${version}.md" |
+    cmp - "docs/benchmarks/${version}.md"
 
 if grep -Fq '](../../docs/' "${release_notes}"; then
-    echo 'FAIL: release-note repository links must include the immutable tag path.' >&2
+    echo 'FAIL: release-note repository links must include an immutable ref path.' >&2
     exit 1
 fi
 
