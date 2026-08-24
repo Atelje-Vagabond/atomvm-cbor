@@ -28,9 +28,33 @@ printf 'PERFORMANCE_BASELINE tag=%s version=%s commit=%s\n' \
 printf 'PERFORMANCE_CURRENT version=%s commit=%s\n' \
     "${current_version}" "${fixed_commit}"
 
-if ! git diff --quiet -- src/avm_cbor.erl src/avm_cbor_cont.erl src/avm_cbor_partial.erl; then
-    echo "source files differ from fixed commit ${fixed_commit}; commit them before benchmarking" >&2
+performance_paths=(
+    src/avm_cbor.erl
+    src/avm_cbor_cont.erl
+    src/avm_cbor_partial.erl
+    src/avm_cbor_opts.hrl
+    bench/remediation_benchmark.erl
+)
+if ! git diff --quiet "${fixed_commit}" -- "${performance_paths[@]}"; then
+    echo "performance sources differ from current commit ${fixed_commit}; commit them before benchmarking" >&2
     exit 1
+fi
+if git diff --quiet "${baseline_commit}..${fixed_commit}" -- \
+    "${performance_paths[@]}"; then
+    noise_tolerance="${BENCHMARK_NOISE_TOLERANCE_PERCENT:-5}"
+    formatted_noise_tolerance="$(python3 -c '
+import sys
+value = float(sys.argv[1])
+if value < 0:
+    raise SystemExit("benchmark noise tolerance must be non-negative")
+print(f"{value:.2f}")
+' "${noise_tolerance}")"
+    source_set_sha256="$(sha256sum "${performance_paths[@]}" | sha256sum | cut -d ' ' -f1)"
+    printf 'PERFORMANCE_REUSE baseline=%s current=%s source_set_sha256=%s\n' \
+        "${baseline_commit}" "${fixed_commit}" "${source_set_sha256}"
+    printf 'PERFORMANCE_GATE_OK noise_tolerance_percent=%s mode=exact-source-reuse\n' \
+        "${formatted_noise_tolerance}"
+    exit 0
 fi
 
 # Use identical, minimal scheduler topology for every fresh baseline/current

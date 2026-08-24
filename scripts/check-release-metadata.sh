@@ -159,6 +159,11 @@ for required in (
     "erl +S 1:1 +SDcpu 1:1 +SDio 1",
     'baseline_id="${baseline_version}-${baseline_commit:0:12}"',
     'current_id="${current_version}-${fixed_commit:0:12}"',
+    'performance_paths=(',
+    'git diff --quiet "${fixed_commit}" -- "${performance_paths[@]}"',
+    'git diff --quiet "${baseline_commit}..${fixed_commit}" --',
+    '"${performance_paths[@]}"',
+    'mode=exact-source-reuse',
 ):
     if required not in benchmark_script:
         raise SystemExit(f"dynamic/stable benchmark invariant is missing: {required}")

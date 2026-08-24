@@ -6,6 +6,9 @@
 
 - Replaced the README Mermaid benchmark charts with deterministic static SVG
   assets so the current-release comparison renders on Hex.pm as well as GitHub.
+- Reuse the previous exact SemVer performance evidence when runtime and
+  benchmark-harness sources are byte-identical; any changed byte continues
+  through the unchanged 5% measurement gate.
 
 ### Compatibility
 

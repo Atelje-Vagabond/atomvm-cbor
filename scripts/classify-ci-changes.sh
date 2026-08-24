@@ -56,8 +56,12 @@ classify_public() {
             otp=true
             coverage=true
             ;;
-        bench/*|scripts/benchmark-remediation.sh|scripts/test-benchmark-regression-gate.sh|scripts/select-semver-baseline.py|scripts/test-semver-baseline-selector.sh)
+        bench/*|scripts/test-benchmark-regression-gate.sh|scripts/select-semver-baseline.py|scripts/test-semver-baseline-selector.sh)
             performance=true
+            ;;
+        scripts/benchmark-remediation.sh)
+            # Static invariants run in hygiene; exact tags select all jobs and
+            # execute this orchestration before publication.
             ;;
         scripts/test-public.sh)
             otp=true
