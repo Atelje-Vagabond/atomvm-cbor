@@ -78,6 +78,13 @@ the code or benchmark changes, or the controlled hardware/runtime
 configuration changes. Preserve the old result as historical evidence when a
 new operating point is introduced.
 
+For an exact-tag documentation-only patch, the host performance gate compares
+the selected previous SemVer commit with the candidate across the runtime
+modules, options header, and benchmark harness. It reuses the previous exact
+evidence only when every one of those paths is byte-identical and records the
+combined source-set SHA-256. Any changed byte follows the normal measured gate
+with the same 5% median and p95 thresholds.
+
 See the [0.3.1 validation report](benchmarks/0.3.1.md) for the current package
 and retained exact evidence, and the [0.3.0 validation
 report](benchmarks/0.3.0.md) for the original exact-public-tag,
