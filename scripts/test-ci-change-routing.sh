@@ -35,6 +35,12 @@ for key in performance otp coverage atomvm esp_idf; do
     assert_route "${public_release_evidence}" "${key}" false
 done
 
+public_version_only="$(route public VERSION)"
+assert_route "${public_version_only}" package true
+for key in performance otp coverage atomvm esp_idf; do
+    assert_route "${public_version_only}" "${key}" false
+done
+
 public_runtime="$(route public src/avm_cbor.erl)"
 for key in performance otp coverage atomvm esp_idf package; do
     assert_route "${public_runtime}" "${key}" true

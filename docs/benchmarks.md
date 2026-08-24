@@ -78,7 +78,9 @@ the code or benchmark changes, or the controlled hardware/runtime
 configuration changes. Preserve the old result as historical evidence when a
 new operating point is introduced.
 
-See the [0.3.0 validation report](benchmarks/0.3.0.md) for the exact-public-tag,
+See the [0.3.1 validation report](benchmarks/0.3.1.md) for the current package
+and retained exact evidence, and the [0.3.0 validation
+report](benchmarks/0.3.0.md) for the original exact-public-tag,
 same-device comparison against 0.2.0 on the ESP32-S3 N16R8, WaveShare N32R16V,
 and RP2040 E462 boards at 240 MHz, 240 MHz, and 133 MHz respectively. The
 [0.2.0 validation report](benchmarks/0.2.0.md) retains the earlier 160 MHz and

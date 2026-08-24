@@ -73,7 +73,6 @@ classify_public() {
             esp_idf=true
             ;;
         VERSION)
-            performance=true
             package=true
             ;;
         rebar.config|rebar.lock)

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.1
+
+### Fixed
+
+- Replaced the README Mermaid benchmark charts with deterministic static SVG
+  assets so the current-release comparison renders on Hex.pm as well as GitHub.
+
+### Compatibility
+
+- Runtime code, public APIs, package behavior, supported runtimes, benchmark
+  values, and validation thresholds are unchanged from 0.3.0.
+
 ## 0.3.0
 
 ### Added
