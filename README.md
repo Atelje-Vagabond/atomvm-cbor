@@ -16,6 +16,66 @@ encoding/folding, exact-size encoding, and complete-input validation. Version
 0.2.0 was the first Hex.pm release; public Git tag `v0.1.1` was never published
 to Hex.
 
+## Current release
+
+<!-- release-evidence:readme-current-release:start -->
+Representative attached-device benchmark changes from 0.2.0 to 0.3.0. Negative is faster; positive is slower. Chart labels are percentages rounded to two decimal places; exact timings follow in the benchmark table.
+
+```mermaid
+---
+config:
+  xyChart:
+    height: 360
+    showDataLabel: true
+    showDataLabelOutsideBar: true
+  themeVariables:
+    xyChart:
+      plotColorPalette: "#5C2D91"
+---
+xychart-beta
+    title "ESP32-S3 N16R8 at 240 MHz"
+    x-axis ["encode/1", "decode/1", "partial_decode/1"]
+    y-axis "Timing change (%)" -0.24 --> 0.24
+    bar [-0.06, -0.19, 0.00]
+```
+
+```mermaid
+---
+config:
+  xyChart:
+    height: 360
+    showDataLabel: true
+    showDataLabelOutsideBar: true
+  themeVariables:
+    xyChart:
+      plotColorPalette: "#65AE00"
+---
+xychart-beta
+    title "WaveShare N32R16V at 240 MHz"
+    x-axis ["encode/1", "decode/1", "partial_decode/1"]
+    y-axis "Timing change (%)" -0.13 --> 0.13
+    bar [0.02, 0.11, 0.03]
+```
+
+```mermaid
+---
+config:
+  xyChart:
+    height: 360
+    showDataLabel: true
+    showDataLabelOutsideBar: true
+  themeVariables:
+    xyChart:
+      plotColorPalette: "#2F80ED"
+---
+xychart-beta
+    title "RP2040 E462… at 133 MHz"
+    x-axis ["encode/1", "decode/1", "partial_decode/1"]
+    y-axis "Timing change (%)" -1.12 --> 1.12
+    bar [-0.69, -0.25, 0.93]
+```
+<!-- release-evidence:readme-current-release:end -->
+
 ## Installation
 
 Rebar3 projects use the OTP application name `avm_cbor` and Hex package name `atomvm_cbor`:
@@ -48,45 +108,34 @@ Mix projects use:
 
 ## Attached-device benchmarks
 
-Lower timings are better. The common encode/decode results compare the exact
-public `v0.1.1` baseline with `0.2.0` using the same CBOR payload and AtomVM
-0.6.6 harness on each device. See the [benchmark methodology](docs/benchmarks.md)
-and the [full 0.2.0 validation report](docs/benchmarks/0.2.0.md) for complete
-provenance, hardware details, soak results, and reproduction guidance.
+The exact public `0.2.0` and `0.3.0` tags were measured on the same three
+physical devices with AtomVM 0.6.6, identical firmware and harness conditions,
+and five alternating paired captures. Both ESP32-S3 CPUs ran at their supported
+240 MHz upper limit; RP2040 ran at its supported 133 MHz upper limit. Lower
+timings are better.
 
-| Board | Function | v0.1.1 µs | 0.2.0 µs | Change |
-|---|---:|---:|---:|---:|
-| ESP32-S3 (8 MB PSRAM) | `encode/1` | 8705.82 | 7120.54 | 18.21% faster |
-| ESP32-S3 (8 MB PSRAM) | `decode/1` | 8508.98 | 8683.68 | 2.05% slower |
-| RP2040 (16 MB flash) | `encode/1` | 7248.56 | 5118.92 | 29.38% faster |
-| RP2040 (16 MB flash) | `decode/1` | 7105.50 | 6400.78 | 9.92% faster |
-| WaveShare ESP32-S3-DEV-KIT-N32R16V | `encode/1` | 6080.32 | 4064.56 | 33.15% faster |
-| WaveShare ESP32-S3-DEV-KIT-N32R16V | `decode/1` | 5853.32 | 4600.30 | 21.41% faster |
+<!-- release-evidence:readme-identities:start -->
+| Board | Exact identity | CPU |
+|---|---|---:|
+| ESP32-S3 N16R8 | QFN56 rev 0.2, MAC `1c:db:d4:5b:f5:d0`, native USB identifier `1C:DB:D4:5B:F5:D0` | 240 MHz |
+| WaveShare N32R16V | ESP32-S3-DEV-KIT-N32R16V, MAC `90:e5:b1:d8:48:b0`, CH340 UART serial `5B61092782` | 240 MHz |
+| RP2040 E462… | RP2040 B2, BOOTSEL serial `E0C9125B0D9B`, flash ID `E46254C5C32D122C` | 133 MHz |
+<!-- release-evidence:readme-identities:end -->
 
-The partial/deferred APIs are new in `0.2.0`, so no `v0.1.1` measurements
-exist for them.
+<!-- release-evidence:readme-summary:start -->
+| Function | ESP32-S3 N16R8 0.2.0 µs | 0.3.0 µs | Change | WaveShare N32R16V 0.2.0 µs | 0.3.0 µs | Change | RP2040 E462… 0.2.0 µs | 0.3.0 µs | Change |
+| :--- | ---: | ---: | :--- | ---: | ---: | :--- | ---: | ---: | :--- |
+| `encode/1` | 8849.46 | 8844.02 | 0.06% faster | 3507.30 | 3508.00 | 0.02% slower | 4824.60 | 4791.26 | 0.69% faster |
+| `decode/1` | 10063.52 | 10044.02 | 0.19% faster | 3931.22 | 3935.36 | 0.11% slower | 6082.16 | 6067.22 | 0.25% faster |
+| `partial_decode/1` | 15575.38 | 15575.92 | 0.00% slower | 6325.48 | 6327.62 | 0.03% slower | 9261.06 | 9346.80 | 0.93% slower |
+<!-- release-evidence:readme-summary:end -->
 
-| Function | ESP32-S3 0.2.0 µs | RP2040 0.2.0 µs | WaveShare N32R16V 0.2.0 µs |
-|---|---:|---:|---:|
-| `partial_decode/1` | 13109.00 | 9875.48 | 7518.24 |
-| `partial_decode/2` | 13326.80 | 9928.18 | 7570.60 |
-| `partial_deep_decode/1` | 10805.88 | 8243.96 | 5911.32 |
-| `partial_value_bytes/1` | 767.53 | 579.66 | 562.63 |
-| `partial_contents/1` | 959.06 | 506.69 | 607.53 |
-| `partial_skip/1` | 380.07 | 228.66 | 295.30 |
-| `partial_type/1` | 382.08 | 229.65 | 295.48 |
-| `partial_count/1` | 381.27 | 229.65 | 296.33 |
-| `partial_tag/1` | 438.55 | 253.83 | 360.91 |
-| `partial_size/1` | 455.71 | 260.95 | 382.75 |
-| `partial_offset/1` | 379.89 | 227.56 | 296.28 |
-| `partial_length/1` | 382.62 | 234.45 | 295.84 |
-
-The older ESP32-S3 `decode/1` regression is measured and reproducible. It is
-accepted under the unchanged 5% release threshold because `0.2.0` retains the
-new fail-closed node and string-byte accounting on this general decode path.
-The same workload improves on RP2040 and WaveShare, so no single hardware or
-security-check cause is claimed. The full report includes the complete
-technical interpretation and maximum-bound testing.
+The full report publishes all 14 comparable workloads and all nine 0.3.0-only
+workloads for every board, exact host results, measured accessor regressions,
+device and firmware identities, three-device 40-round soak evidence, evidence
+checksums, and reproduction details. See the
+[0.3.0 validation report](docs/benchmarks/0.3.0.md) and the
+[historical 0.2.0 report](docs/benchmarks/0.2.0.md).
 
 ## Public term representation
 

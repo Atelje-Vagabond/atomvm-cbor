@@ -20,15 +20,15 @@ python3 scripts/gen-api-docs.py
 | `decode_all/2` | Decode a complete CBOR sequence using explicit options. |
 | `decode_sequence/1` | Decode as many complete CBOR items as possible using default options. |
 | `decode_sequence/2` | Decode as many complete CBOR items as possible using explicit options. |
-| `sequence_fold/3` | TODO document this function. |
+| `sequence_fold/3` | Fold complete CBOR sequence items without building a result list. |
 | `encode/1` | Encode one supported Erlang value using default options. |
 | `encode/2` | Encode one supported Erlang value using explicit options. |
-| `encode_with_size/1` | TODO document this function. |
-| `encode_with_size/2` | TODO document this function. |
-| `encode_sequence/1` | TODO document this function. |
-| `encode_sequence/2` | TODO document this function. |
-| `validate_all/1` | TODO document this function. |
-| `validate_all/2` | TODO document this function. |
+| `encode_with_size/1` | Encode one value and return its exact byte size using default options. |
+| `encode_with_size/2` | Encode one value and return its exact byte size using explicit options. |
+| `encode_sequence/1` | Encode a list of values as an RFC 8742 CBOR sequence using default options. |
+| `encode_sequence/2` | Encode a list of values as an RFC 8742 CBOR sequence using explicit options. |
+| `validate_all/1` | Validate exactly one complete CBOR item using default partial-decoding limits. |
+| `validate_all/2` | Validate exactly one complete CBOR item using explicit options. |
 | `partial_decode/1` | Validate and measure one CBOR item without eagerly constructing nested terms. |
 | `partial_decode/2` | Partially decode one CBOR item using explicit options. |
 | `partial_value_bytes/1` | Return the complete encoded bytes represented by a partial descriptor. |
@@ -41,11 +41,11 @@ python3 scripts/gen-api-docs.py
 | `partial_offset/1` | Return the descriptor item offset. |
 | `partial_length/1` | Return the complete encoded length of a descriptor item. |
 | `partial_contents/1` | Return encoded child bytes for an array, map, or tag. |
-| `partial_map_fold/3` | TODO document this function. |
-| `partial_array_fold/3` | TODO document this function. |
-| `partial_select/2` | TODO document this function. |
-| `partial_map_find/2` | TODO document this function. |
-| `partial_array_nth/2` | TODO document this function. |
+| `partial_map_fold/3` | Fold a map descriptor as opaque key and value descriptors. |
+| `partial_array_fold/3` | Fold an array descriptor as opaque element descriptors. |
+| `partial_select/2` | Select requested keys from a map descriptor in one pass. |
+| `partial_map_find/2` | Find the first matching key in a map descriptor. |
+| `partial_array_nth/2` | Return an opaque array element descriptor by zero-based index. |
 | `get/2` | Look up a key in a decoded CBOR map. |
 | `get/3` | Look up a key in a decoded CBOR map with a default. |
 | `require/2` | Require a key in a decoded CBOR map. |
@@ -67,6 +67,12 @@ Decode one CBOR item using default options.
 decode(term()) -> decode_result()
 ```
 
+**Example**
+
+```erlang
+{ok, 42, <<>>} = avm_cbor:decode(<<16#18, 42>>).
+```
+
 **What it does**
 
 Reads one complete CBOR value and returns the decoded value plus trailing bytes.
@@ -83,6 +89,12 @@ Decode one CBOR item using explicit options.
 
 ```erlang
 decode(term(), term()) -> decode_result()
+```
+
+**Example**
+
+```erlang
+{ok, [1, 2], <<>>} = avm_cbor:decode(<<16#82, 1, 2>>, [{max_items, 3}]).
 ```
 
 **What it does**
@@ -103,6 +115,13 @@ Start a pull-based decode with explicit options.
 decode_start(term(), term()) -> {ok, term()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, State} = avm_cbor:decode_start(<<16#82, 1, 2>>, []),
+{done, [1, 2], <<>>} = avm_cbor:decode_continue(State, 100).
+```
+
 **What it does**
 
 Returns an opaque immutable continuation without performing parser work.
@@ -119,6 +138,13 @@ Advance a continuation by a positive work budget.
 
 ```erlang
 decode_continue(term(), term()) -> {done, term(), binary()} | {more, term()} | {error, term()}
+```
+
+**Example**
+
+```erlang
+{ok, State} = avm_cbor:decode_start(<<16#82, 1, 2>>, []),
+{done, [1, 2], <<>>} = avm_cbor:decode_continue(State, 100).
 ```
 
 **What it does**
@@ -139,6 +165,12 @@ Decode a complete CBOR sequence using default options.
 decode_all(term()) -> {ok, list()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, [1, 2]} = avm_cbor:decode_all(<<1, 2>>).
+```
+
 **What it does**
 
 Consumes all CBOR items and succeeds only when no trailing data remains.
@@ -155,6 +187,12 @@ Decode a complete CBOR sequence using explicit options.
 
 ```erlang
 decode_all(term(), term()) -> {ok, list()} | {error, term()}
+```
+
+**Example**
+
+```erlang
+{ok, [1, 2]} = avm_cbor:decode_all(<<1, 2>>, [{max_items, 2}]).
 ```
 
 **What it does**
@@ -175,6 +213,12 @@ Decode as many complete CBOR items as possible using default options.
 decode_sequence(term()) -> {ok, list(), binary()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, [1], <<16#82, 2>>} = avm_cbor:decode_sequence(<<1, 16#82, 2>>).
+```
+
 **What it does**
 
 Returns complete items and keeps a truncated final item as Rest.
@@ -193,6 +237,12 @@ Decode as many complete CBOR items as possible using explicit options.
 decode_sequence(term(), term()) -> {ok, list(), binary()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, [1, 2], <<>>} = avm_cbor:decode_sequence(<<1, 2>>, [{max_items, 2}]).
+```
+
 **What it does**
 
 Like decode_sequence/1, but applies caller-provided limits and feature flags.
@@ -203,7 +253,7 @@ It does not hide malformed data; malformed items still return errors.
 
 ### `sequence_fold/3`
 
-TODO document this function.
+Fold complete CBOR sequence items without building a result list.
 
 **Spec**
 
@@ -211,13 +261,20 @@ TODO document this function.
 sequence_fold(term(), term(), term()) -> {ok, term(), binary()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+Sum = fun(Item, Acc) -> {cont, Item + Acc} end,
+{ok, 6, <<>>} = avm_cbor:sequence_fold(<<1, 2, 3>>, Sum, 0).
+```
+
 **What it does**
 
-TODO
+Calls Fun(Item, Acc) for each complete item; {cont, NewAcc} continues, while {halt, Result} returns the result and unconsumed Rest.
 
 **What it is not**
 
-TODO
+It is not a streaming-input API; a truncated final item is returned unchanged as Rest, and callback exceptions are not caught.
 
 ### `encode/1`
 
@@ -227,6 +284,12 @@ Encode one supported Erlang value using default options.
 
 ```erlang
 encode(term()) -> encode_result()
+```
+
+**Example**
+
+```erlang
+{ok, <<16#82, 1, 2>>} = avm_cbor:encode([1, 2]).
 ```
 
 **What it does**
@@ -247,6 +310,12 @@ Encode one supported Erlang value using explicit options.
 encode(term(), list()) -> encode_result()
 ```
 
+**Example**
+
+```erlang
+{ok, <<23>>} = avm_cbor:encode(23, [{preferred, true}]).
+```
+
 **What it does**
 
 Supports preferred and deterministic serialization while enforcing caller-provided limits.
@@ -257,7 +326,7 @@ It does not support arbitrary Erlang terms outside the documented representation
 
 ### `encode_with_size/1`
 
-TODO document this function.
+Encode one value and return its exact byte size using default options.
 
 **Spec**
 
@@ -265,17 +334,23 @@ TODO document this function.
 encode_with_size(term()) -> {ok, binary(), non_neg_integer()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, <<16#82, 1, 2>>, 3} = avm_cbor:encode_with_size([1, 2]).
+```
+
 **What it does**
 
-TODO
+Returns {ok, Binary, Size}, where Size is measured from the binary produced by the single encode operation.
 
 **What it is not**
 
-TODO
+It is not a separate sizing or preflight pass.
 
 ### `encode_with_size/2`
 
-TODO document this function.
+Encode one value and return its exact byte size using explicit options.
 
 **Spec**
 
@@ -283,17 +358,23 @@ TODO document this function.
 encode_with_size(term(), term()) -> {ok, binary(), non_neg_integer()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, <<23>>, 1} = avm_cbor:encode_with_size(23, [{preferred, true}]).
+```
+
 **What it does**
 
-TODO
+Applies the same normalized options and limits as encode/2, then returns {ok, Binary, Size}.
 
 **What it is not**
 
-TODO
+It does not estimate a size or encode the value twice.
 
 ### `encode_sequence/1`
 
-TODO document this function.
+Encode a list of values as an RFC 8742 CBOR sequence using default options.
 
 **Spec**
 
@@ -301,17 +382,23 @@ TODO document this function.
 encode_sequence(term()) -> {ok, binary()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, <<1, 2, 3>>} = avm_cbor:encode_sequence([1, 2, 3]).
+```
+
 **What it does**
 
-TODO
+Encodes each list element as one CBOR data item and concatenates the item binaries while enforcing sequence limits.
 
 **What it is not**
 
-TODO
+It does not encode the input list as a CBOR array.
 
 ### `encode_sequence/2`
 
-TODO document this function.
+Encode a list of values as an RFC 8742 CBOR sequence using explicit options.
 
 **Spec**
 
@@ -319,17 +406,23 @@ TODO document this function.
 encode_sequence(term(), term()) -> {ok, binary()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, <<1, 2>>} = avm_cbor:encode_sequence([1, 2], [{max_items, 2}]).
+```
+
 **What it does**
 
-TODO
+Applies the supplied encoding options to every item and enforces cumulative max_items and max_bytes limits.
 
 **What it is not**
 
-TODO
+It does not accept a non-list or improper list as a sequence.
 
 ### `validate_all/1`
 
-TODO document this function.
+Validate exactly one complete CBOR item using default partial-decoding limits.
 
 **Spec**
 
@@ -337,17 +430,23 @@ TODO document this function.
 validate_all(term()) -> ok | {error, term()}
 ```
 
+**Example**
+
+```erlang
+ok = avm_cbor:validate_all(<<16#82, 1, 2>>).
+```
+
 **What it does**
 
-TODO
+Checks the entire item and returns ok only when no trailing bytes remain, without materializing its nested Erlang value.
 
 **What it is not**
 
-TODO
+It is not a CBOR sequence validator; additional complete items are reported as trailing bytes.
 
 ### `validate_all/2`
 
-TODO document this function.
+Validate exactly one complete CBOR item using explicit options.
 
 **Spec**
 
@@ -355,13 +454,19 @@ TODO document this function.
 validate_all(term(), term()) -> ok | {error, term()}
 ```
 
+**Example**
+
+```erlang
+ok = avm_cbor:validate_all(<<23>>, [{preferred, true}]).
+```
+
 **What it does**
 
-TODO
+Applies partial-decoding limits plus deterministic or preferred checks and rejects trailing bytes.
 
 **What it is not**
 
-TODO
+It does not return the decoded value; use decode_all/2 when the materialized term is required.
 
 ### `partial_decode/1`
 
@@ -371,6 +476,13 @@ Validate and measure one CBOR item without eagerly constructing nested terms.
 
 ```erlang
 partial_decode(term()) -> {ok, term(), binary()} | {error, term()}
+```
+
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#82, 1, 2>>),
+array = avm_cbor:partial_type(Partial).
 ```
 
 **What it does**
@@ -391,6 +503,13 @@ Partially decode one CBOR item using explicit options.
 partial_decode(term(), term()) -> {ok, term(), binary()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#81, 1>>, [{max_depth, 2}]),
+array = avm_cbor:partial_type(Partial).
+```
+
 **What it does**
 
 Applies decode limits, deterministic/preferred checks, and the partial max_string_size limit.
@@ -407,6 +526,13 @@ Return the complete encoded bytes represented by a partial descriptor.
 
 ```erlang
 partial_value_bytes(term()) -> binary() | {error, term()}
+```
+
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#82, 1, 2>>),
+<<16#82, 1, 2>> = avm_cbor:partial_value_bytes(Partial).
 ```
 
 **What it does**
@@ -427,6 +553,13 @@ Materialize the value represented by a partial descriptor.
 partial_deep_decode(term()) -> {ok, term()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#82, 1, 2>>),
+{ok, [1, 2]} = avm_cbor:partial_deep_decode(Partial).
+```
+
 **What it does**
 
 Fully decodes the validated item only when the caller needs it.
@@ -443,6 +576,13 @@ Discard a validated partial descriptor.
 
 ```erlang
 partial_skip(term()) -> ok | {error, term()}
+```
+
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#82, 1, 2>>),
+ok = avm_cbor:partial_skip(Partial).
 ```
 
 **What it does**
@@ -463,6 +603,13 @@ Return the CBOR category represented by a partial descriptor.
 partial_type(term()) -> atom() | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#82, 1, 2>>),
+array = avm_cbor:partial_type(Partial).
+```
+
 **What it does**
 
 Reports unsigned, negative, bytes, text, array, map, tag, float, or simple.
@@ -479,6 +626,13 @@ Return an array item count or map pair count.
 
 ```erlang
 partial_count(term()) -> non_neg_integer() | undefined | {error, term()}
+```
+
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#A1, 1, 2>>),
+1 = avm_cbor:partial_count(Partial).
 ```
 
 **What it does**
@@ -499,6 +653,13 @@ Return the semantic tag number from a tag descriptor.
 partial_tag(term()) -> non_neg_integer() | undefined | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#C1, 1>>),
+1 = avm_cbor:partial_tag(Partial).
+```
+
 **What it does**
 
 Returns undefined for non-tag descriptors.
@@ -515,6 +676,13 @@ Return the content size of a byte or text string descriptor.
 
 ```erlang
 partial_size(term()) -> non_neg_integer() | undefined | {error, term()}
+```
+
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#62, "ok">>),
+2 = avm_cbor:partial_size(Partial).
 ```
 
 **What it does**
@@ -535,6 +703,13 @@ Return the descriptor item offset.
 partial_offset(term()) -> non_neg_integer() | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#82, 1, 2>>),
+0 = avm_cbor:partial_offset(Partial).
+```
+
 **What it does**
 
 Reports the start offset recorded for the represented item.
@@ -551,6 +726,13 @@ Return the complete encoded length of a descriptor item.
 
 ```erlang
 partial_length(term()) -> non_neg_integer() | {error, term()}
+```
+
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#82, 1, 2>>),
+3 = avm_cbor:partial_length(Partial).
 ```
 
 **What it does**
@@ -571,6 +753,13 @@ Return encoded child bytes for an array, map, or tag.
 partial_contents(term()) -> {ok, binary()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#82, 1, 2>>),
+{ok, <<1, 2>>} = avm_cbor:partial_contents(Partial).
+```
+
 **What it does**
 
 The returned binary can be walked with repeated partial_decode calls.
@@ -581,7 +770,7 @@ It does not deep-decode the children.
 
 ### `partial_map_fold/3`
 
-TODO document this function.
+Fold a map descriptor as opaque key and value descriptors.
 
 **Spec**
 
@@ -589,17 +778,25 @@ TODO document this function.
 partial_map_fold(term(), fun((term(), term(), term()) -> {cont, term()} | {halt, term()}), term()) -> {ok, term()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#A1, 1, 2>>),
+Count = fun(_Key, _Value, Acc) -> {cont, Acc + 1} end,
+{ok, 1} = avm_cbor:partial_map_fold(Partial, Count, 0).
+```
+
 **What it does**
 
-TODO
+Calls Fun(KeyDescriptor, ValueDescriptor, Acc) in CBOR map order; {cont, NewAcc} continues and {halt, Result} stops early.
 
 **What it is not**
 
-TODO
+It does not materialize the map or catch callback exceptions.
 
 ### `partial_array_fold/3`
 
-TODO document this function.
+Fold an array descriptor as opaque element descriptors.
 
 **Spec**
 
@@ -607,17 +804,28 @@ TODO document this function.
 partial_array_fold(term(), fun((term(), term()) -> {cont, term()} | {halt, term()}), term()) -> {ok, term()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#82, 1, 2>>),
+Sum = fun(Element, Acc) ->
+    {ok, Value} = avm_cbor:partial_deep_decode(Element),
+    {cont, Acc + Value}
+end,
+{ok, 3} = avm_cbor:partial_array_fold(Partial, Sum, 0).
+```
+
 **What it does**
 
-TODO
+Calls Fun(ElementDescriptor, Acc) in array order with the same continue and early-halt contract as partial_map_fold/3.
 
 **What it is not**
 
-TODO
+It does not materialize the array or accept a non-array descriptor.
 
 ### `partial_select/2`
 
-TODO document this function.
+Select requested keys from a map descriptor in one pass.
 
 **Spec**
 
@@ -625,17 +833,25 @@ TODO document this function.
 partial_select(term(), term()) -> {ok, [{term(), term()}], [term()]} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#A2, 1, 2, 3, 4>>),
+{ok, [{1, Value}], [9]} = avm_cbor:partial_select(Partial, [1, 9]),
+{ok, 2} = avm_cbor:partial_deep_decode(Value).
+```
+
 **What it does**
 
-TODO
+Returns {ok, Found, Missing}; found pairs retain CBOR map order, missing keys retain request order, and values remain descriptors.
 
 **What it is not**
 
-TODO
+It does not accept duplicate requested keys or deep-decode selected values; the first matching map entry wins.
 
 ### `partial_map_find/2`
 
-TODO document this function.
+Find the first matching key in a map descriptor.
 
 **Spec**
 
@@ -643,17 +859,25 @@ TODO document this function.
 partial_map_find(term(), term()) -> {ok, term()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#A1, 1, 2>>),
+{ok, Value} = avm_cbor:partial_map_find(Partial, 1),
+{ok, 2} = avm_cbor:partial_deep_decode(Value).
+```
+
 **What it does**
 
-TODO
+Compares decoded keys exactly and returns the matching opaque value descriptor without decoding that value.
 
 **What it is not**
 
-TODO
+It does not return a materialized value or search past the first match.
 
 ### `partial_array_nth/2`
 
-TODO document this function.
+Return an opaque array element descriptor by zero-based index.
 
 **Spec**
 
@@ -661,13 +885,21 @@ TODO document this function.
 partial_array_nth(term(), term()) -> {ok, term()} | {error, term()}
 ```
 
+**Example**
+
+```erlang
+{ok, Partial, <<>>} = avm_cbor:partial_decode(<<16#82, 1, 2>>),
+{ok, Second} = avm_cbor:partial_array_nth(Partial, 1),
+{ok, 2} = avm_cbor:partial_deep_decode(Second).
+```
+
 **What it does**
 
-TODO
+Traverses the array until the requested non-negative index and returns that element descriptor.
 
 **What it is not**
 
-TODO
+It is not one-based and does not deep-decode the selected element.
 
 ### `get/2`
 
@@ -677,6 +909,13 @@ Look up a key in a decoded CBOR map.
 
 ```erlang
 get(term(), {map, list()}) -> {ok, term()} | error
+```
+
+**Example**
+
+```erlang
+Map = {map, [{{text, <<"id">>}, 7}]},
+{ok, 7} = avm_cbor:get({text, <<"id">>}, Map).
 ```
 
 **What it does**
@@ -697,6 +936,13 @@ Look up a key in a decoded CBOR map with a default.
 get(term(), {map, list()}, term()) -> term()
 ```
 
+**Example**
+
+```erlang
+Map = {map, []},
+unknown = avm_cbor:get({text, <<"id">>}, Map, unknown).
+```
+
 **What it does**
 
 Returns the value when present, otherwise returns the supplied default.
@@ -713,6 +959,13 @@ Require a key in a decoded CBOR map.
 
 ```erlang
 require(term(), {map, list()}) -> {ok, term()} | {error, {missing_key, term()}}
+```
+
+**Example**
+
+```erlang
+Map = {map, [{{text, <<"id">>}, 7}]},
+{ok, 7} = avm_cbor:require({text, <<"id">>}, Map).
 ```
 
 **What it does**
@@ -733,6 +986,12 @@ Extract a decoded CBOR text string.
 as_text(term()) -> {ok, binary()} | {error, bad_type}
 ```
 
+**Example**
+
+```erlang
+{ok, <<"hello">>} = avm_cbor:as_text({text, <<"hello">>}).
+```
+
 **What it does**
 
 Accepts {text, Bin} and returns the UTF-8 binary.
@@ -749,6 +1008,12 @@ Extract a decoded CBOR byte string.
 
 ```erlang
 as_bytes(term()) -> {ok, binary()} | {error, bad_type}
+```
+
+**Example**
+
+```erlang
+{ok, <<1, 2>>} = avm_cbor:as_bytes(<<1, 2>>).
 ```
 
 **What it does**
@@ -769,6 +1034,12 @@ Extract a decoded CBOR integer.
 as_int(term()) -> {ok, integer()} | {error, bad_type}
 ```
 
+**Example**
+
+```erlang
+{ok, 42} = avm_cbor:as_int(42).
+```
+
 **What it does**
 
 Accepts Erlang integers returned by the decoder.
@@ -787,6 +1058,12 @@ Extract a decoded CBOR boolean.
 as_bool(term()) -> {ok, boolean()} | {error, bad_type}
 ```
 
+**Example**
+
+```erlang
+{ok, true} = avm_cbor:as_bool(true).
+```
+
 **What it does**
 
 Accepts only true or false.
@@ -803,6 +1080,13 @@ Return strict options for small BLE-oriented payloads.
 
 ```erlang
 ble_options() -> list()
+```
+
+**Example**
+
+```erlang
+Options = avm_cbor:ble_options(),
+{max_depth, 8} = lists:keyfind(max_depth, 1, Options).
 ```
 
 **What it does**
