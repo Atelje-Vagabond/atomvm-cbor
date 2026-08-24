@@ -267,6 +267,62 @@ def change_text(baseline: float, candidate: float) -> str:
     return f"{percent:.2f}% {direction}"
 
 
+def mermaid_label(value: str) -> str:
+    return value.replace("&", "&amp;").replace('"', "&quot;")
+
+
+def current_release_diagram(data: dict[str, Any]) -> str:
+    baseline_version = mermaid_label(data["baseline"]["version"])
+    candidate_version = mermaid_label(data["candidate"]["version"])
+    common_count = len(data["common_workloads"])
+    candidate_only_count = len(data["candidate_only_workloads"])
+    soak_rounds = {
+        data["targets"][target_id]["functional_soak"]["rounds"]
+        for target_id in REQUIRED_TARGETS
+    }
+    if len(soak_rounds) != 1:
+        fail("all maintained targets must use the same bounded-soak round count")
+    soak_rounds_text = next(iter(soak_rounds))
+
+    lines = [
+        "```mermaid",
+        "flowchart LR",
+        f'    baseline["Previous release<br/>{baseline_version}"]',
+        f'    current["Current release<br/>{candidate_version}"]',
+        f'    comparable["{common_count} comparable workloads<br/>{baseline_version} vs {candidate_version}"]',
+        f'    candidate_only["{candidate_only_count} current-only workloads<br/>measured on every target"]',
+        f'    soak["Bounded soak<br/>{soak_rounds_text} rounds per target"]',
+        "    baseline --> current",
+        "    current --> comparable",
+        "    current --> candidate_only",
+        "    current --> soak",
+    ]
+
+    target_nodes = []
+    waveshare_nodes = []
+    for index, target_id in enumerate(REQUIRED_TARGETS, start=1):
+        target = data["targets"][target_id]
+        node_id = f"target{index}"
+        label = mermaid_label(f"{target['short_name']}<br/>{target['cpu']}")
+        lines.append(f'    {node_id}["{label}"]')
+        target_nodes.append(node_id)
+        if "waveshare" in target_id.lower() or "waveshare" in label.lower():
+            waveshare_nodes.append(node_id)
+
+    lines.extend(f"    current --> {node_id}" for node_id in target_nodes)
+    lines.extend(
+        [
+            "    classDef currentRelease fill:#5C2D91,color:#FFFFFF,stroke:#3D1E61,stroke-width:2px",
+            "    classDef waveshareBrand fill:#65AE00,color:#FFFFFF,stroke:#3D6900,stroke-width:2px",
+            "    class current currentRelease",
+        ]
+    )
+    if waveshare_nodes:
+        lines.append(f"    class {','.join(waveshare_nodes)} waveshareBrand")
+    lines.append("```")
+    return "\n".join(lines)
+
+
 def identity_table(data: dict[str, Any], compact: bool = False) -> str:
     targets = data["targets"]
     if compact:
@@ -424,6 +480,9 @@ def render_documents(path: Path, data: dict[str, Any]) -> dict[Path, str]:
     notes_text = replace_block(notes_text, "notes-soak", soak_table(data))
 
     readme_text = readme.read_text(encoding="utf-8")
+    readme_text = replace_block(
+        readme_text, "readme-current-release", current_release_diagram(data)
+    )
     readme_text = replace_block(
         readme_text, "readme-identities", identity_table(data, compact=True)
     )

@@ -79,7 +79,7 @@ classify_public() {
         rebar.config|rebar.lock)
             mark_public_runtime
             ;;
-        .github/workflows/publish-hex.yml|.github/releases/*|docs/*|README.md|CHANGELOG.md|LICENSE|hex_metadata.config|scripts/gen-api-docs.py|scripts/check-hex-package.sh|scripts/release-check.sh|scripts/read-release-version.py|scripts/verify-hex-release.py)
+        .github/workflows/publish-hex.yml|.github/releases/*|docs/*|README.md|CHANGELOG.md|LICENSE|hex_metadata.config|scripts/gen-api-docs.py|scripts/release-evidence.py|scripts/check-hex-package.sh|scripts/release-check.sh|scripts/read-release-version.py|scripts/verify-hex-release.py)
             package=true
             ;;
         .github/workflows/release-gate.yml)

@@ -29,6 +29,12 @@ assert_route "${public_docs}" performance false
 assert_route "${public_docs}" otp false
 assert_route "${public_docs}" esp_idf false
 
+public_release_evidence="$(route public scripts/release-evidence.py)"
+assert_route "${public_release_evidence}" package true
+for key in performance otp coverage atomvm esp_idf; do
+    assert_route "${public_release_evidence}" "${key}" false
+done
+
 public_runtime="$(route public src/avm_cbor.erl)"
 for key in performance otp coverage atomvm esp_idf package; do
     assert_route "${public_runtime}" "${key}" true

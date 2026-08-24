@@ -16,6 +16,33 @@ encoding/folding, exact-size encoding, and complete-input validation. Version
 0.2.0 was the first Hex.pm release; public Git tag `v0.1.1` was never published
 to Hex.
 
+## Current release
+
+<!-- release-evidence:readme-current-release:start -->
+```mermaid
+flowchart LR
+    baseline["Previous release<br/>0.2.0"]
+    current["Current release<br/>0.3.0"]
+    comparable["14 comparable workloads<br/>0.2.0 vs 0.3.0"]
+    candidate_only["9 current-only workloads<br/>measured on every target"]
+    soak["Bounded soak<br/>40 rounds per target"]
+    baseline --> current
+    current --> comparable
+    current --> candidate_only
+    current --> soak
+    target1["ESP32-S3 N16R8<br/>240 MHz"]
+    target2["WaveShare N32R16V<br/>240 MHz"]
+    target3["RP2040 E462…<br/>133 MHz"]
+    current --> target1
+    current --> target2
+    current --> target3
+    classDef currentRelease fill:#5C2D91,color:#FFFFFF,stroke:#3D1E61,stroke-width:2px
+    classDef waveshareBrand fill:#65AE00,color:#FFFFFF,stroke:#3D6900,stroke-width:2px
+    class current currentRelease
+    class target2 waveshareBrand
+```
+<!-- release-evidence:readme-current-release:end -->
+
 ## Installation
 
 Rebar3 projects use the OTP application name `avm_cbor` and Hex package name `atomvm_cbor`:
